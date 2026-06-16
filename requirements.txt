@@ -1,0 +1,15 @@
+streamlit==1.32.0
+pandas==2.2.1
+numpy==1.26.4
+plotly==5.20.0
+yfinance==0.2.38
+fredapi==0.5.1
+requests==2.31.0
+python-dotenv==1.0.1
+curl_cffi==0.13.0
+anthropic==0.109.2
+beautifulsoup4==4.12.3
+lxml==5.1.0
+pytz==2024.1
+ta==0.11.0
+kaleido==0.2.1
