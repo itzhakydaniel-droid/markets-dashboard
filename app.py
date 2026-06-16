@@ -318,17 +318,25 @@ ai_ok     = is_ai_available()
 # These are all cached — first call hits the network, subsequent calls are instant.
 # Fire them concurrently so cold-start only pays the max single latency, not the sum.
 from concurrent.futures import ThreadPoolExecutor as _TPE
-with _TPE(max_workers=5) as _ex:
-    _f_quotes  = _ex.submit(load_quotes, ("SPY","QQQ","IWM","^VIX"))
-    _f_vix     = _ex.submit(load_vix)
-    _f_breadth = _ex.submit(load_breadth)
-    _f_cta     = _ex.submit(load_cta)
-    _f_sector  = _ex.submit(load_sector_perf)
-    _hdr_quotes = _f_quotes.result()
-    _hdr_vix    = _f_vix.result()
-    _breadth    = _f_breadth.result()
-    _cta_data   = _f_cta.result()
-    _sector_df  = _f_sector.result()
+_hdr_quotes = pd.DataFrame()
+_hdr_vix    = pd.DataFrame()
+_breadth    = {}
+_cta_data   = {}
+_sector_df  = pd.DataFrame()
+try:
+    with _TPE(max_workers=5) as _ex:
+        _f_quotes  = _ex.submit(load_quotes, ("SPY","QQQ","IWM","^VIX"))
+        _f_vix     = _ex.submit(load_vix)
+        _f_breadth = _ex.submit(load_breadth)
+        _f_cta     = _ex.submit(load_cta)
+        _f_sector  = _ex.submit(load_sector_perf)
+        _hdr_quotes = _f_quotes.result()
+        _hdr_vix    = _f_vix.result()
+        _breadth    = _f_breadth.result()
+        _cta_data   = _f_cta.result()
+        _sector_df  = _f_sector.result()
+except Exception as _prefetch_err:
+    st.warning(f"⚠️ Prefetch error (non-fatal): {_prefetch_err}")
 
 _hdr_map = dict(zip(_hdr_quotes["Ticker"], _hdr_quotes.to_dict("records"))) if not _hdr_quotes.empty else {}
 
