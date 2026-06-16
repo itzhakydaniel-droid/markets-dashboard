@@ -26,34 +26,40 @@ try:
 except Exception:
     pass
 
-from src.data.macro_data import fetch_macro_indicators
-from src.data.market_data import (
-    fetch_quotes, fetch_relative_strength, fetch_vix_history,
-    fetch_sector_performance, fetch_breadth_data, fetch_ohlcv, fetch_fundamentals,
-    DEFAULT_WATCHLIST,
-)
-from src.data.smart_money import fetch_insider_trades, fetch_dark_pool_prints, fetch_13f_changes
-from src.data.cta_proxy import fetch_cta_exposure_proxy, fetch_vix_term_structure
-from src.utils.scoring import score_all_indicators, interpret_score
-from src.utils.alerts import PriceAlert, check_alerts, send_webhook
-from src.components.charts import (
-    macro_gauge, score_breakdown_bar,
-    vix_chart, vix_term_bar,
-    sector_heatmap, sector_bars,
-    stocks_heatmap, watchlist_performance_chart,
-    advance_decline_chart, candlestick_chart,
-    cta_exposure_chart, macro_indicator_sparkline,
-    kill_zone_radar, macro_liquidity_chart,
-)
-from src.data.ai_engine import (
-    ask_ai, generate_market_brief, analyze_ticker,
-    _build_market_context, is_ai_available,
-)
-from src.data.black_raven import (
-    TIER_UNIVERSE, score_catalyst, save_catalyst, load_catalysts,
-    fetch_tier_radar, fetch_macro_matrix, compute_hedge_params,
-    compute_rsi,
-)
+try:
+    from src.data.macro_data import fetch_macro_indicators
+    from src.data.market_data import (
+        fetch_quotes, fetch_relative_strength, fetch_vix_history,
+        fetch_sector_performance, fetch_breadth_data, fetch_ohlcv, fetch_fundamentals,
+        DEFAULT_WATCHLIST,
+    )
+    from src.data.smart_money import fetch_insider_trades, fetch_dark_pool_prints, fetch_13f_changes
+    from src.data.cta_proxy import fetch_cta_exposure_proxy, fetch_vix_term_structure
+    from src.utils.scoring import score_all_indicators, interpret_score
+    from src.utils.alerts import PriceAlert, check_alerts, send_webhook
+    from src.components.charts import (
+        macro_gauge, score_breakdown_bar,
+        vix_chart, vix_term_bar,
+        sector_heatmap, sector_bars,
+        stocks_heatmap, watchlist_performance_chart,
+        advance_decline_chart, candlestick_chart,
+        cta_exposure_chart, macro_indicator_sparkline,
+        kill_zone_radar, macro_liquidity_chart,
+    )
+    from src.data.ai_engine import (
+        ask_ai, generate_market_brief, analyze_ticker,
+        _build_market_context, is_ai_available,
+    )
+    from src.data.black_raven import (
+        TIER_UNIVERSE, score_catalyst, save_catalyst, load_catalysts,
+        fetch_tier_radar, fetch_macro_matrix, compute_hedge_params,
+        compute_rsi,
+    )
+except Exception as _import_err:
+    import traceback as _tb
+    st.set_page_config(page_title="Markets Dashboard", page_icon="📊", layout="wide")
+    st.error(f"**Startup import error** — please report this:\n\n```\n{_tb.format_exc()}\n```")
+    st.stop()
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
