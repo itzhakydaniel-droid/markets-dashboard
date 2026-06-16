@@ -6,10 +6,7 @@ yfinance==0.2.38
 fredapi==0.5.1
 requests==2.31.0
 python-dotenv==1.0.1
-curl_cffi==0.13.0
-anthropic==0.109.2
+curl_cffi==0.7.4
+anthropic>=0.25.0
 beautifulsoup4==4.12.3
 lxml==5.1.0
-pytz==2024.1
-ta==0.11.0
-kaleido==0.2.1
