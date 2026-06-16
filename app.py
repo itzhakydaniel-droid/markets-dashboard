@@ -1705,7 +1705,9 @@ with tab_raven:
                     save_catalyst.__wrapped__ if hasattr(save_catalyst,'__wrapped__') else None
                     import json
                     from pathlib import Path
-                    Path("/Users/danielitzhaky/markets map clude/data/catalysts.json").write_text("[]")
+                    from src.data.black_raven import CATALYSTS_FILE
+                    CATALYSTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                    CATALYSTS_FILE.write_text("[]")
                     st.rerun()
 
     # ════════════════════════════════════════════════════════════════════════
