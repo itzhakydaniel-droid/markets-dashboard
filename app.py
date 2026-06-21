@@ -5,24 +5,30 @@ Run with: streamlit run app.py
 from __future__ import annotations
 
 import os, sys
+from datetime import datetime
+
+# ── Page config — MUST be the absolute first Streamlit command ────────────────
+import streamlit as st
+st.set_page_config(
+    page_title="Markets Dashboard",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
 import pandas as pd
 import numpy as np
-import streamlit as st
-from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 sys.path.insert(0, os.path.dirname(__file__))
 
 # ── Streamlit Cloud secrets → os.environ bridge ───────────────────────────────
-# When deployed on Streamlit Community Cloud, secrets are in st.secrets (not .env).
-# We push them into os.environ so every downstream module reads them transparently.
 try:
-    import streamlit as _st
     for _k in ["FRED_API_KEY","ANTHROPIC_API_KEY","MAKE_WEBHOOK_URL",
                 "DISCORD_WEBHOOK_URL","UNUSUAL_WHALES_API_KEY","REFRESH_INTERVAL_SECONDS"]:
-        if _k in _st.secrets and not os.getenv(_k):
-            os.environ[_k] = str(_st.secrets[_k])
+        if _k in st.secrets and not os.getenv(_k):
+            os.environ[_k] = str(st.secrets[_k])
 except Exception:
     pass
 
@@ -57,17 +63,8 @@ try:
     )
 except Exception as _import_err:
     import traceback as _tb
-    st.set_page_config(page_title="Markets Dashboard", page_icon="📊", layout="wide")
     st.error(f"**Startup import error** — please report this:\n\n```\n{_tb.format_exc()}\n```")
     st.stop()
-
-# ── Page config ───────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Markets Dashboard",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""
