@@ -10,20 +10,22 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 
 # ── Theme constants ───────────────────────────────────────────────────────────
-BG       = "#080c14"
-CARD     = "#111827"
-BORDER   = "#1e2533"
-GRID     = "#1e2d45"
-TEXT     = "#f1f5f9"
-MUTED    = "#9ca3af"
-DIM      = "#6b7280"
+BG       = "#0d141c"
+CARD     = "#101828"
+BORDER   = "#1E2832"
+GRID     = "#22304a"
+TEXT     = "#fffffe"
+MUTED    = "#a2b6df"
+DIM      = "#475467"
 GREEN    = "#10b981"
 RED      = "#ef4444"
 YELLOW   = "#f59e0b"
 BLUE     = "#3b82f6"
 PURPLE   = "#8b5cf6"
 INDIGO   = "#6366f1"
-CYAN     = "#06b6d4"
+CYAN     = "#0CABC2"
+MAGENTA  = "#f00069"
+TEAL     = "#5DC7D6"
 
 BASE_LAYOUT = dict(
     paper_bgcolor=BG,
@@ -835,7 +837,7 @@ def intraday_live_chart(series_map: dict[str, pd.Series], label_map: dict[str, s
     from its first bar of the day. Expects {ticker: pd.Series of closes}.
     """
     label_map = label_map or {}
-    palette = [BLUE, PURPLE, YELLOW, CYAN, GREEN, RED]
+    palette = [TEAL, MAGENTA, YELLOW, BLUE, GREEN, PURPLE]
     fig = go.Figure()
 
     for i, (ticker, s) in enumerate(series_map.items()):
