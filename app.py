@@ -39,7 +39,6 @@ try:
         fetch_sector_performance, fetch_breadth_data, fetch_ohlcv, fetch_fundamentals,
         DEFAULT_WATCHLIST,
     )
-    from src.data.smart_money import fetch_insider_trades, fetch_dark_pool_prints, fetch_13f_changes
     from src.data.cta_proxy import fetch_cta_exposure_proxy, fetch_vix_term_structure
     from src.utils.scoring import score_all_indicators, interpret_score
     from src.utils.alerts import PriceAlert, check_alerts, send_webhook
@@ -284,10 +283,6 @@ def load_cta():
     return fetch_cta_exposure_proxy()
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_smart_money(ticker):
-    return fetch_insider_trades(ticker), fetch_dark_pool_prints(ticker), fetch_13f_changes(ticker)
-
-@st.cache_data(ttl=3600, show_spinner=False)
 def load_fundamentals(ticker):
     return fetch_fundamentals(ticker)
 
@@ -401,8 +396,11 @@ _cta_data   = {}
 _sector_df  = pd.DataFrame()
 _tape_df    = pd.DataFrame()
 _intraday   = {}
+_wl_quotes  = pd.DataFrame()
+_wl_intraday = {}
+_wl_tuple = tuple(st.session_state.watchlist)
 try:
-    with _TPE(max_workers=7) as _ex:
+    with _TPE(max_workers=9) as _ex:
         _f_quotes  = _ex.submit(load_quotes, ("SPY","QQQ","IWM","^VIX"))
         _f_vix     = _ex.submit(load_vix)
         _f_breadth = _ex.submit(load_breadth)
@@ -410,6 +408,8 @@ try:
         _f_sector  = _ex.submit(load_sector_perf)
         _f_tape    = _ex.submit(load_tape_quotes)
         _f_intra   = _ex.submit(load_intraday, ("SPY","QQQ","IWM","^VIX"))
+        _f_wl_q    = _ex.submit(load_quotes, _wl_tuple)
+        _f_wl_i    = _ex.submit(load_intraday, _wl_tuple)
         _hdr_quotes = _f_quotes.result()
         _hdr_vix    = _f_vix.result()
         _breadth    = _f_breadth.result()
@@ -417,6 +417,8 @@ try:
         _sector_df  = _f_sector.result()
         _tape_df    = _f_tape.result()
         _intraday   = _f_intra.result()
+        _wl_quotes  = _f_wl_q.result()
+        _wl_intraday = _f_wl_i.result()
 except Exception as _prefetch_err:
     st.warning(f"⚠️ Prefetch error (non-fatal): {_prefetch_err}")
 
@@ -646,6 +648,33 @@ if _idx_intraday:
         )
 
 # ══════════════════════════════════════════════════════════════════════════════
+# LIVE WATCHLIST — real-time quotes + sparklines for every watchlist ticker
+# ══════════════════════════════════════════════════════════════════════════════
+if not _wl_quotes.empty:
+    section("⚡ Live Watchlist")
+    _wl_rows = [r for _, r in _wl_quotes.iterrows() if isinstance(r.get("Price"), (int, float))]
+    _per_row = 6
+    for _start in range(0, len(_wl_rows), _per_row):
+        _chunk = _wl_rows[_start:_start + _per_row]
+        _cols = st.columns(_per_row)
+        for _col, _r in zip(_cols, _chunk):
+            with _col:
+                _t   = _r["Ticker"]
+                _p   = _r["Price"]
+                _chg = _r.get("Change %")
+                _cs  = color_pct(_chg)
+                _c_s = f"{_chg:+.2f}%" if isinstance(_chg, (int, float)) else "—"
+                _p_s = f"${_p:,.2f}" if _p >= 1 else f"${_p:.4f}"
+                _spk = svg_spark(_wl_intraday.get(_t, []), _cs, w=100, h=22)
+                st.markdown(f"""<div class='kpi-tile' style='border-top:2px solid {_cs};padding:10px 8px 8px'>
+                    <div class='kpi-label'>{_t}</div>
+                    <div class='kpi-value' style='font-size:1.15rem'>{_p_s}</div>
+                    <div style='font-size:.75rem;color:{_cs};font-weight:700'>{_c_s}</div>
+                    {_spk}
+                </div>""", unsafe_allow_html=True)
+    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
 # TABS
 # ══════════════════════════════════════════════════════════════════════════════
 tabs = st.tabs([
@@ -657,10 +686,9 @@ tabs = st.tabs([
     "🌪️  Volatility & CTA",
     "🔔  Price Alerts",
     "🔍  Stock Review",
-    "🐋  Big Hands",
 ])
 (tab_macro, tab_raven, tab_watch, tab_heat_stocks,
- tab_breadth, tab_vol, tab_alert, tab_review, tab_smart) = tabs
+ tab_breadth, tab_vol, tab_alert, tab_review) = tabs
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1357,64 +1385,7 @@ with tab_review:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 9 — BIG HANDS
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_smart:
-    si_col, _ = st.columns([1,3])
-    smart_ticker = si_col.text_input(
-        "Ticker", value=st.session_state.selected_ticker,
-        key="smart_ticker", placeholder="NVDA, AAPL…"
-    ).upper().strip()
-
-    if smart_ticker:
-        with st.spinner(f"Loading institutional data for {smart_ticker}…"):
-            insiders, dark_pool, filings = load_smart_money(smart_ticker)
-
-        st.markdown(f"<div style='font-size:1rem;font-weight:700;color:#f1f5f9;margin:8px 0 14px'>{smart_ticker} — Smart Money Activity</div>", unsafe_allow_html=True)
-        in_tab, dp_tab, f13_tab = st.tabs(["👤 Insider Trades","🌑 Dark Pool","🏦 13F Filings"])
-
-        with in_tab:
-            st.caption("Source: OpenInsider.com • Public SEC filings • 180-day lookback")
-            if insiders is not None and not insiders.empty:
-                trade_col = next((c for c in insiders.columns if "Trade" in c), None)
-                buys  = insiders[insiders[trade_col].str.contains("P -",na=False)] if trade_col else pd.DataFrame()
-                sells = insiders[insiders[trade_col].str.contains("S -",na=False)] if trade_col else pd.DataFrame()
-                net = len(buys) - len(sells)
-                nc = "#10b981" if net>0 else "#ef4444" if net<0 else "#6b7280"
-                nl = "NET BUYERS" if net>0 else "NET SELLERS" if net<0 else "NEUTRAL"
-                bc3 = st.columns(3)
-                with bc3[0]: kpi("Insider Buys", str(len(buys)), accent="#10b981")
-                with bc3[1]: kpi("Insider Sells", str(len(sells)), accent="#ef4444")
-                with bc3[2]:
-                    st.markdown(f"""<div class='kpi-tile' style='border-top:2px solid {nc}'>
-                        <div class='kpi-label'>Signal</div>
-                        <div class='kpi-value' style='color:{nc};font-size:1rem'>{nl}</div>
-                    </div>""", unsafe_allow_html=True)
-                st.dataframe(insiders, use_container_width=True, hide_index=True)
-            else:
-                st.info("No insider data found for this ticker in the last 180 days.")
-
-        with dp_tab:
-            st.caption("Source: Unusual Whales API • Requires UNUSUAL_WHALES_API_KEY in .env")
-            if dark_pool is not None and not dark_pool.empty:
-                st.dataframe(dark_pool, use_container_width=True, hide_index=True)
-            else:
-                st.info("No dark pool data. Add UNUSUAL_WHALES_API_KEY to your .env file.")
-
-        with f13_tab:
-            st.caption("Source: SEC EDGAR • 13F-HR filings • 120-day lookback")
-            if filings is not None and not filings.empty:
-                st.markdown(f"Found **{len(filings)}** filings mentioning **{smart_ticker}**")
-                st.dataframe(filings, use_container_width=True, hide_index=True)
-            else:
-                st.info("No 13F filings found in the past 120 days.")
-
-    st.divider()
-    st.caption("⚠️ For informational purposes only. Not financial advice.")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 9 (2) — BLACK RAVEN EXECUTIVE DASHBOARD
+# TAB — BLACK RAVEN EXECUTIVE DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_raven:
 
