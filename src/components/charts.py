@@ -827,3 +827,42 @@ def macro_liquidity_chart(macro_dict: dict) -> go.Figure:
         margin=dict(l=14, r=14, t=44, b=14),
     )
     return fig
+
+
+def intraday_live_chart(series_map: dict[str, pd.Series], label_map: dict[str, str] | None = None) -> go.Figure:
+    """
+    Live intraday performance chart — each ticker normalized to % change
+    from its first bar of the day. Expects {ticker: pd.Series of closes}.
+    """
+    label_map = label_map or {}
+    palette = [BLUE, PURPLE, YELLOW, CYAN, GREEN, RED]
+    fig = go.Figure()
+
+    for i, (ticker, s) in enumerate(series_map.items()):
+        if s is None or len(s) < 2:
+            continue
+        base = float(s.iloc[0])
+        if base == 0:
+            continue
+        pct = (s / base - 1.0) * 100.0
+        col = palette[i % len(palette)]
+        last = float(pct.iloc[-1])
+        fig.add_trace(go.Scatter(
+            x=pct.index, y=pct.values,
+            mode="lines",
+            name=f"{label_map.get(ticker, ticker)}  {last:+.2f}%",
+            line=dict(color=col, width=2.2, shape="spline", smoothing=0.6),
+            hovertemplate=f"<b>{label_map.get(ticker, ticker)}</b> %{{y:+.2f}}%%<extra></extra>",
+        ))
+
+    fig.add_hline(y=0, line=dict(color=DIM, width=1, dash="dot"))
+    _apply(fig, h=310, title="Live Intraday  •  Today's Session  •  % vs Open")
+    fig.update_layout(
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1.0,
+                    font=dict(size=11, color=TEXT), bgcolor="rgba(0,0,0,0)"),
+        yaxis=dict(ticksuffix="%", showgrid=True, gridcolor=GRID, zeroline=False),
+        xaxis=dict(showgrid=False, tickformat="%H:%M"),
+        margin=dict(l=14, r=14, t=48, b=14),
+        hovermode="x unified",
+    )
+    return fig

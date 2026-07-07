@@ -51,7 +51,9 @@ try:
         advance_decline_chart, candlestick_chart,
         cta_exposure_chart, macro_indicator_sparkline,
         kill_zone_radar, macro_liquidity_chart,
+        intraday_live_chart,
     )
+    from src.data.price_fetcher import fetch_intraday_multi
     from src.data.ai_engine import (
         ask_ai, generate_market_brief, analyze_ticker,
         _build_market_context, is_ai_available,
@@ -96,14 +98,42 @@ button[data-testid="collapsedControl"]    { display: none !important; }
 
 /* KPI tiles */
 .kpi-tile {
-    background: #111827; border: 1px solid #1e2533; border-radius: 12px;
-    padding: 13px 12px; text-align: center; overflow: hidden;
+    background: linear-gradient(160deg,#131c2e 0%,#0f1524 100%);
+    border: 1px solid #232d42; border-radius: 14px;
+    padding: 14px 12px 10px; text-align: center; overflow: hidden;
+    transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
 }
-.kpi-label { font-size: .66rem; color: #6b7280; text-transform: uppercase;
-             letter-spacing: .08em; font-weight: 600; margin-bottom: 3px; }
-.kpi-value { font-size: 1.35rem; font-weight: 800; color: #f1f5f9; line-height: 1.1; }
-.kpi-delta-pos { font-size: .75rem; color: #10b981; font-weight: 600; margin-top: 2px; }
-.kpi-delta-neg { font-size: .75rem; color: #ef4444; font-weight: 600; margin-top: 2px; }
+.kpi-tile:hover {
+    border-color: #3b82f6; transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(59,130,246,.12);
+}
+.kpi-label { font-size: .68rem; color: #8b95a8; text-transform: uppercase;
+             letter-spacing: .09em; font-weight: 700; margin-bottom: 4px; }
+.kpi-value { font-size: 1.55rem; font-weight: 800; color: #f8fafc; line-height: 1.12;
+             letter-spacing: -.02em; }
+.kpi-delta-pos { font-size: .8rem; color: #10b981; font-weight: 700; margin-top: 2px; }
+.kpi-delta-neg { font-size: .8rem; color: #ef4444; font-weight: 700; margin-top: 2px; }
+.kpi-spark { margin-top: 4px; opacity: .95; }
+
+/* ── Ticker tape ── */
+.tape-wrap {
+    overflow: hidden; background: linear-gradient(90deg,#0d1320,#111a2c 50%,#0d1320);
+    border: 1px solid #1e2938; border-radius: 10px; margin: 2px 0 10px;
+    position: relative; height: 38px; display:flex; align-items:center;
+}
+.tape-track {
+    display: inline-flex; gap: 34px; white-space: nowrap; padding-left: 100%;
+    animation: tape-scroll 45s linear infinite; align-items: center;
+}
+.tape-wrap:hover .tape-track { animation-play-state: paused; }
+@keyframes tape-scroll {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+}
+.tape-item { font-size: .82rem; font-weight: 700; color: #cbd5e1; }
+.tape-item .sym { color: #7dd3fc; margin-right: 7px; font-weight: 800; }
+.tape-item .up  { color: #10b981; }
+.tape-item .dn  { color: #ef4444; }
 
 /* Indicator cards */
 .ind-card {
@@ -145,11 +175,14 @@ button[data-testid="collapsedControl"]    { display: none !important; }
 }
 
 /* Tabs */
-.stTabs [data-baseweb="tab-list"] { gap: 4px; background: #0d1117; border-bottom: 1px solid #1e2533; padding: 0 4px; }
-.stTabs [data-baseweb="tab"] { background: transparent; border-radius: 8px 8px 0 0;
-    padding: 10px 18px; font-weight: 600; font-size: .82rem; color: #6b7280; }
-.stTabs [aria-selected="true"] { background: #111827 !important; color: #f1f5f9 !important;
-    border-top: 2px solid #3b82f6 !important; }
+.stTabs [data-baseweb="tab-list"] { gap: 6px; background: #0d1117; border-bottom: 1px solid #1e2533;
+    padding: 4px 6px 0; border-radius: 12px 12px 0 0; position: sticky; top: 0; z-index: 50; }
+.stTabs [data-baseweb="tab"] { background: transparent; border-radius: 10px 10px 0 0;
+    padding: 12px 20px; font-weight: 700; font-size: .9rem; color: #8b95a8;
+    transition: color .15s ease, background .15s ease; }
+.stTabs [data-baseweb="tab"]:hover { color: #cbd5e1; background: #131c2e; }
+.stTabs [aria-selected="true"] { background: #16213a !important; color: #f8fafc !important;
+    border-top: 3px solid #3b82f6 !important; box-shadow: 0 -4px 16px rgba(59,130,246,.15); }
 
 /* Input overrides */
 .stTextArea textarea, .stTextInput input {
@@ -277,6 +310,18 @@ def load_oil_price():
     s = fetch_history_robust("CL=F", (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d"))
     return float(s.iloc[-1]) if s is not None and not s.empty else None
 
+@st.cache_data(ttl=120, show_spinner=False)          # live tape — crypto/commodities/FX/yields
+def load_tape_quotes():
+    return fetch_quotes([
+        "BTC-USD", "ETH-USD", "GC=F", "SI=F", "CL=F", "NG=F",
+        "^TNX", "DX-Y.NYB", "EURUSD=X", "GBPUSD=X", "USDJPY=X",
+        "SPY", "QQQ", "IWM", "DIA", "TLT", "HYG", "GLD",
+    ])
+
+@st.cache_data(ttl=120, show_spinner=False)          # intraday bars for live charts + sparklines
+def load_intraday(tickers):
+    return fetch_intraday_multi(list(tickers), interval="5m", range_="1d")
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def kpi(label, value, delta=None, delta_positive=None, accent=None):
     if delta is not None:
@@ -309,6 +354,34 @@ def color_pct(v):
         return "#10b981" if v >= 0 else "#ef4444"
     return "#6b7280"
 
+def svg_spark(series, color: str = "#3b82f6", w: int = 110, h: int = 26) -> str:
+    """Tiny inline SVG sparkline from a numeric series — zero dependencies."""
+    try:
+        vals = [float(v) for v in series if v is not None and v == v]  # drop NaN
+    except Exception:
+        return ""
+    if len(vals) < 2:
+        return ""
+    # downsample to ≤60 points
+    step = max(1, len(vals) // 60)
+    vals = vals[::step]
+    lo, hi = min(vals), max(vals)
+    rng = (hi - lo) or 1.0
+    pts = []
+    for i, v in enumerate(vals):
+        x = i / (len(vals) - 1) * w
+        y = h - 2 - (v - lo) / rng * (h - 4)
+        pts.append(f"{x:.1f},{y:.1f}")
+    path = " ".join(pts)
+    fill_pts = f"0,{h} {path.split(' ')[0]} {path} {w},{h}"
+    return (
+        f"<svg class='kpi-spark' width='{w}' height='{h}' viewBox='0 0 {w} {h}' "
+        f"xmlns='http://www.w3.org/2000/svg'>"
+        f"<polyline points='{fill_pts}' fill='{color}18' stroke='none'/>"
+        f"<polyline points='{path}' fill='none' stroke='{color}' stroke-width='1.8' "
+        f"stroke-linejoin='round' stroke-linecap='round'/></svg>"
+    )
+
 # ══════════════════════════════════════════════════════════════════════════════
 # PREFETCH all header data — run slow loaders in parallel threads
 # ══════════════════════════════════════════════════════════════════════════════
@@ -326,18 +399,24 @@ _hdr_vix    = pd.DataFrame()
 _breadth    = {}
 _cta_data   = {}
 _sector_df  = pd.DataFrame()
+_tape_df    = pd.DataFrame()
+_intraday   = {}
 try:
-    with _TPE(max_workers=5) as _ex:
+    with _TPE(max_workers=7) as _ex:
         _f_quotes  = _ex.submit(load_quotes, ("SPY","QQQ","IWM","^VIX"))
         _f_vix     = _ex.submit(load_vix)
         _f_breadth = _ex.submit(load_breadth)
         _f_cta     = _ex.submit(load_cta)
         _f_sector  = _ex.submit(load_sector_perf)
+        _f_tape    = _ex.submit(load_tape_quotes)
+        _f_intra   = _ex.submit(load_intraday, ("SPY","QQQ","IWM","^VIX"))
         _hdr_quotes = _f_quotes.result()
         _hdr_vix    = _f_vix.result()
         _breadth    = _f_breadth.result()
         _cta_data   = _f_cta.result()
         _sector_df  = _f_sector.result()
+        _tape_df    = _f_tape.result()
+        _intraday   = _f_intra.result()
 except Exception as _prefetch_err:
     st.warning(f"⚠️ Prefetch error (non-fatal): {_prefetch_err}")
 
@@ -387,7 +466,46 @@ with wl_c3:
 st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TOP BAR — ROW 1: SPY / QQQ / IWM / VIX / Macro
+# LIVE TICKER TAPE — crypto / commodities / FX / yields
+# ══════════════════════════════════════════════════════════════════════════════
+_TAPE_LABELS = {
+    "BTC-USD": "BTC", "ETH-USD": "ETH", "GC=F": "GOLD", "SI=F": "SILVER",
+    "CL=F": "OIL", "NG=F": "NATGAS", "^TNX": "US10Y", "DX-Y.NYB": "DXY",
+    "EURUSD=X": "EUR/USD", "GBPUSD=X": "GBP/USD", "USDJPY=X": "USD/JPY",
+    "SPY": "S&P500", "QQQ": "NASDAQ", "IWM": "RUSSELL", "DIA": "DOW",
+    "TLT": "20Y BOND", "HYG": "HY CREDIT", "GLD": "GLD",
+}
+if not _tape_df.empty:
+    _items = []
+    for _, _r in _tape_df.iterrows():
+        _p, _c = _r.get("Price"), _r.get("Change %")
+        if not isinstance(_p, (int, float)):
+            continue
+        _sym = _TAPE_LABELS.get(_r["Ticker"], _r["Ticker"])
+        if _r["Ticker"] == "^TNX":
+            _ps = f"{_p/10:.2f}%"
+        elif _p >= 1000:
+            _ps = f"{_p:,.0f}"
+        elif _p >= 10:
+            _ps = f"{_p:,.2f}"
+        else:
+            _ps = f"{_p:.4f}"
+        _cls = "up" if (_c or 0) >= 0 else "dn"
+        _arr = "▲" if (_c or 0) >= 0 else "▼"
+        _items.append(
+            f"<span class='tape-item'><span class='sym'>{_sym}</span>{_ps} "
+            f"<span class='{_cls}'>{_arr} {abs(_c or 0):.2f}%</span></span>"
+        )
+    if _items:
+        _tape_html = "".join(_items)
+        st.markdown(
+            f"<div class='tape-wrap'><div class='tape-track'>{_tape_html}"
+            f"<span style='width:60px'></span>{_tape_html}</div></div>",
+            unsafe_allow_html=True,
+        )
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TOP BAR — ROW 1: SPY / QQQ / IWM / VIX / Macro  (with live sparklines)
 # ══════════════════════════════════════════════════════════════════════════════
 r1 = st.columns(5)
 for col, ticker, label in zip(r1[:3], ["SPY","QQQ","IWM"], ["S&P 500","Nasdaq 100","Russell 2000"]):
@@ -397,10 +515,12 @@ for col, ticker, label in zip(r1[:3], ["SPY","QQQ","IWM"], ["S&P 500","Nasdaq 10
         p_s = f"${p:,.2f}" if isinstance(p,(int,float)) else "—"
         c_s = f"{chg:+.2f}%" if isinstance(chg,(int,float)) else "—"
         col_s = color_pct(chg)
-        st.markdown(f"""<div class='kpi-tile'>
+        _spk = svg_spark(_intraday.get(ticker, []), col_s)
+        st.markdown(f"""<div class='kpi-tile' style='border-top:2px solid {col_s}'>
             <div class='kpi-label'>{label}</div>
             <div class='kpi-value'>{p_s}</div>
-            <div style='font-size:.75rem;color:{col_s};font-weight:600'>{c_s}</div>
+            <div style='font-size:.8rem;color:{col_s};font-weight:700'>{c_s}</div>
+            {_spk}
         </div>""", unsafe_allow_html=True)
 
 with r1[3]:
@@ -409,12 +529,14 @@ with r1[3]:
     vix_chg  = vix_val - vix_prev
     vix_rgm  = "EXTREME FEAR" if vix_val>30 else "FEAR" if vix_val>20 else "NORMAL" if vix_val>15 else "COMPLACENT"
     vc = "#ef4444" if vix_val>25 else "#f59e0b" if vix_val>18 else "#10b981"
+    _vspk = svg_spark(_intraday.get("^VIX", []), vc)
     st.markdown(f"""<div class='kpi-tile' style='border-top:2px solid {vc}'>
         <div class='kpi-label'>VIX Fear Index</div>
         <div class='kpi-value' style='color:{vc}'>{vix_val:.2f}</div>
-        <div style='font-size:.68rem;color:{vc};font-weight:700'>
+        <div style='font-size:.72rem;color:{vc};font-weight:700'>
             {vix_rgm} &nbsp;<span style='color:{"#10b981" if vix_chg<0 else "#ef4444"}'>{vix_chg:+.2f}</span>
         </div>
+        {_vspk}
     </div>""", unsafe_allow_html=True)
 
 with r1[4]:
@@ -510,6 +632,18 @@ with r2[5]:
         kpi("Worst Sector","—")
 
 st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LIVE INTRADAY CHART — indices vs open, today's session
+# ══════════════════════════════════════════════════════════════════════════════
+_idx_intraday = {t: s for t, s in _intraday.items() if t in ("SPY", "QQQ", "IWM")}
+if _idx_intraday:
+    with st.expander("📡 Live Intraday Chart — Today's Session", expanded=True):
+        st.plotly_chart(
+            intraday_live_chart(_idx_intraday,
+                {"SPY": "S&P 500", "QQQ": "Nasdaq 100", "IWM": "Russell 2000"}),
+            use_container_width=True, config={"displayModeBar": False},
+        )
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TABS

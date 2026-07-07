@@ -162,6 +162,47 @@ def fetch_quotes_multi(tickers: list[str]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+# ── Intraday series ───────────────────────────────────────────────────────────
+
+def fetch_intraday(ticker: str, interval: str = "5m", range_: str = "1d") -> pd.Series:
+    """
+    Fetch intraday close prices for one ticker (default: 5-minute bars, today).
+    Returns a pd.Series indexed by timestamp; empty Series on failure.
+    """
+    url = _YF_CHART.format(ticker=ticker) + f"?interval={interval}&range={range_}&includePrePost=false"
+    data = _curl_get(url) or _std_get(url)
+    if not data:
+        return pd.Series(dtype=float)
+    try:
+        result = data["chart"]["result"][0]
+        ts     = result.get("timestamp") or []
+        closes = result["indicators"]["quote"][0].get("close") or []
+        if not ts or not closes:
+            return pd.Series(dtype=float)
+        s = pd.Series(closes, index=pd.to_datetime(ts, unit="s"), dtype=float).dropna()
+        return s
+    except Exception:
+        return pd.Series(dtype=float)
+
+
+def fetch_intraday_multi(tickers: list[str], interval: str = "5m", range_: str = "1d") -> dict[str, pd.Series]:
+    """Fetch intraday series for many tickers in parallel. Returns {ticker: Series}."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _one(t: str):
+        return t, fetch_intraday(t, interval, range_)
+
+    out: dict[str, pd.Series] = {}
+    tickers = list(tickers)
+    if not tickers:
+        return out
+    with ThreadPoolExecutor(max_workers=min(16, len(tickers))) as ex:
+        for t, s in ex.map(_one, tickers):
+            if not s.empty:
+                out[t] = s
+    return out
+
+
 # ── Historical OHLCV ──────────────────────────────────────────────────────────
 
 def fetch_ohlcv_robust(ticker: str, period: str = "1y") -> pd.DataFrame:
