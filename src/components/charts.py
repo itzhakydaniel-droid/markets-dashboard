@@ -936,3 +936,78 @@ def sector_detail_chart(s: pd.Series, spy: pd.Series | None, name: str) -> go.Fi
     fig.update_yaxes(gridcolor=GRID, zeroline=False)
     fig.update_xaxes(gridcolor=GRID, showgrid=False)
     return fig
+
+
+def yield_curve_chart(curve_data: dict) -> go.Figure:
+    """
+    US Treasury yield curve — latest vs 1 month ago vs 1 year ago.
+    Category x-axis in maturity order (1 Mo → 30 Yr).
+    """
+    latest = curve_data.get("latest")
+    if latest is None or latest.empty:
+        return go.Figure()
+
+    fig = go.Figure()
+    series_cfg = [
+        (curve_data.get("year_ago"),  "1 Year Ago",  DIM,     1.4, "dot"),
+        (curve_data.get("month_ago"), "1 Month Ago", YELLOW,  1.6, "dash"),
+        (latest,                      f"Latest ({curve_data.get('asof','')})", TEAL, 2.8, None),
+    ]
+    for s, name, color, width, dash in series_cfg:
+        if s is None:
+            continue
+        s = s.dropna()
+        line = dict(color=color, width=width)
+        if dash:
+            line["dash"] = dash
+        fig.add_trace(go.Scatter(
+            x=list(s.index), y=list(s.values),
+            mode="lines+markers", name=name,
+            line=line, marker=dict(size=6 if dash is None else 4),
+            hovertemplate="<b>%{x}</b>: %{y:.2f}%<extra>" + name + "</extra>",
+        ))
+
+    _apply(fig, h=380, title="US Treasury Yield Curve  •  Official Treasury Dept Data")
+    fig.update_layout(
+        yaxis=dict(ticksuffix="%", showgrid=True, gridcolor=GRID),
+        xaxis=dict(showgrid=False, type="category"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1.0,
+                    font=dict(size=11, color=TEXT), bgcolor="rgba(0,0,0,0)"),
+        hovermode="x unified",
+    )
+    return fig
+
+
+def yield_spread_chart(spread: pd.Series, label: str = "10Y − 2Y") -> go.Figure:
+    """Yield-spread history with inversion shading below zero."""
+    if spread is None or spread.empty:
+        return go.Figure()
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=spread.index, y=spread.values,
+        mode="lines", name=label,
+        line=dict(color=MAGENTA, width=1.8),
+        fill="tozeroy", fillcolor="rgba(240,0,105,.08)",
+        hovertemplate="%{x|%d %b %Y}: %{y:+.2f}pp<extra></extra>",
+    ))
+    fig.add_hline(y=0, line=dict(color=RED, width=1.4, dash="dash"),
+                  annotation_text="INVERSION LINE", annotation_position="bottom right",
+                  annotation_font=dict(color=RED, size=10))
+
+    cur = float(spread.iloc[-1])
+    fig.add_trace(go.Scatter(
+        x=[spread.index[-1]], y=[cur],
+        mode="markers+text",
+        marker=dict(color=TEAL, size=9, line=dict(color=TEXT, width=1.5)),
+        text=[f"  {cur:+.2f}"], textposition="middle right",
+        textfont=dict(color=TEXT, size=12), showlegend=False,
+    ))
+
+    _apply(fig, h=380, title=f"Curve Spread  •  {label}  •  Recession Signal When Below Zero")
+    fig.update_layout(
+        yaxis=dict(ticksuffix="pp", showgrid=True, gridcolor=GRID, zeroline=False),
+        xaxis=dict(showgrid=False),
+        showlegend=False,
+    )
+    return fig

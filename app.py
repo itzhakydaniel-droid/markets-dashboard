@@ -54,7 +54,8 @@ try:
     )
     from src.data.price_fetcher import fetch_intraday_multi
     from src.data.sector_rating import fetch_sector_ratings, interpret_sector_score
-    from src.components.charts import sector_detail_chart
+    from src.components.charts import sector_detail_chart, yield_curve_chart, yield_spread_chart
+    from src.data.yield_curve import fetch_yield_curve
     from src.data.ai_engine import (
         ask_ai, generate_market_brief, analyze_ticker,
         _build_market_context, is_ai_available,
@@ -350,6 +351,10 @@ def load_sector_ratings():
 @st.cache_data(ttl=300, show_spinner=False)          # BLACK RAVEN 50-stock sweep
 def load_raven_dashboard():
     return fetch_raven_dashboard()
+
+@st.cache_data(ttl=3600, show_spinner=False)         # Treasury yield curve — updates once per day EOD
+def load_yield_curve():
+    return fetch_yield_curve(years_back=3)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def kpi(label, value, delta=None, delta_positive=None, accent=None):
@@ -944,6 +949,60 @@ with tab_macro:
                 st.error(f"Macro data error: {e}")
                 with st.expander("Debug"):
                     st.exception(e)
+
+    # ── US TREASURY YIELD CURVE — official Treasury Dept feed (no key) ────────
+    section("🏛️ US Treasury Yield Curve — Official Treasury Department Data")
+    try:
+        _yc = load_yield_curve()
+    except Exception:
+        _yc = {}
+
+    if _yc and "latest" in _yc:
+        _l = _yc["latest"]
+        _s2510 = _yc.get("spread_2s10s")
+        _s3m10 = _yc.get("spread_3m10y")
+        _inv   = _yc.get("inverted", False)
+
+        _yc_cols = st.columns(6)
+        _kpis = [
+            ("3-Month",  _l.get("3 Mo"),  "%"), ("2-Year", _l.get("2 Yr"), "%"),
+            ("10-Year",  _l.get("10 Yr"), "%"), ("30-Year", _l.get("30 Yr"), "%"),
+        ]
+        for _c, (_lbl, _v, _sfx) in zip(_yc_cols[:4], _kpis):
+            _c.markdown(f"""<div class='kpi-tile'>
+                <div class='kpi-label'>{_lbl} Yield</div>
+                <div class='kpi-value' style='font-size:1.3rem'>{_v:.2f}{_sfx}</div>
+            </div>""", unsafe_allow_html=True)
+        with _yc_cols[4]:
+            _sv = float(_s2510.iloc[-1]) if _s2510 is not None else None
+            _sc = "#ef4444" if _inv else "#10b981"
+            st.markdown(f"""<div class='kpi-tile' style='border-top:2px solid {_sc}'>
+                <div class='kpi-label'>2s10s Spread</div>
+                <div class='kpi-value' style='font-size:1.3rem;color:{_sc}'>{_sv:+.2f}pp</div>
+                <div style='font-size:.64rem;color:{_sc};font-weight:700'>{"🚨 INVERTED" if _inv else "NORMAL SLOPE"}</div>
+            </div>""", unsafe_allow_html=True)
+        with _yc_cols[5]:
+            _sv3 = float(_s3m10.iloc[-1]) if _s3m10 is not None else None
+            _sc3 = "#ef4444" if (_sv3 is not None and _sv3 < 0) else "#10b981"
+            st.markdown(f"""<div class='kpi-tile' style='border-top:2px solid {_sc3}'>
+                <div class='kpi-label'>3m10y Spread</div>
+                <div class='kpi-value' style='font-size:1.3rem;color:{_sc3}'>{_sv3:+.2f}pp</div>
+                <div style='font-size:.64rem;color:{_sc3};font-weight:700'>{"🚨 INVERTED" if _sv3 is not None and _sv3 < 0 else "NORMAL SLOPE"}</div>
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        _yc1, _yc2 = st.columns(2)
+        with _yc1:
+            st.plotly_chart(yield_curve_chart(_yc), use_container_width=True,
+                            config={"displayModeBar": False})
+        with _yc2:
+            if _s2510 is not None:
+                st.plotly_chart(yield_spread_chart(_s2510, "10Y − 2Y"), use_container_width=True,
+                                config={"displayModeBar": False})
+        st.caption(f"Source: US Treasury Department daily yield curve rates (same primary source as "
+                   f"ustreasuryyieldcurve.com) • As of {_yc.get('asof','—')} • Refreshes hourly")
+    else:
+        st.info("Treasury yield curve data unavailable right now.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
