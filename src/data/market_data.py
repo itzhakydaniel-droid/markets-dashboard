@@ -19,11 +19,9 @@ from src.data.price_fetcher import (
     SECTOR_ETFS,
 )
 
-DEFAULT_WATCHLIST = [
-    "SMCI", "GOOGL", "NVDA", "AAPL", "MSFT",
-    "ARKX", "UFO", "ROKT",
-    "SPY", "QQQ", "IWM",
-]
+# Watchlist mirrors the Black Raven 50-stock master watchlist (tier order)
+from src.data.black_raven import MASTER_WATCHLIST
+DEFAULT_WATCHLIST = list(MASTER_WATCHLIST.keys())
 
 
 def fetch_quotes(tickers: list[str]) -> pd.DataFrame:
