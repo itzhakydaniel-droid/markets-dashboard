@@ -60,8 +60,8 @@ try:
         _build_market_context, is_ai_available,
     )
     from src.data.black_raven import (
-        TIER_UNIVERSE, score_catalyst, save_catalyst, load_catalysts,
-        fetch_tier_radar, fetch_macro_matrix, compute_hedge_params,
+        TIER_UNIVERSE, MASTER_WATCHLIST, score_catalyst, save_catalyst, load_catalysts,
+        fetch_tier_radar, fetch_macro_matrix, fetch_raven_dashboard, compute_hedge_params,
         compute_rsi,
     )
 except Exception as _import_err:
@@ -346,6 +346,10 @@ def load_intraday(tickers, interval: str = "5m", range_: str = "1d"):
 @st.cache_data(ttl=900, show_spinner=False)          # sector ratings — 2y of bars × 12 ETFs
 def load_sector_ratings():
     return fetch_sector_ratings(years=2)
+
+@st.cache_data(ttl=300, show_spinner=False)          # BLACK RAVEN 50-stock sweep
+def load_raven_dashboard():
+    return fetch_raven_dashboard()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def kpi(label, value, delta=None, delta_positive=None, accent=None):
@@ -1600,10 +1604,88 @@ with tab_raven:
     # ── MODULE SELECTOR ───────────────────────────────────────────────────────
     br_mod = st.radio(
         "Module",
-        ["📡 Macro Matrix", "🎯 Kill Zone Radar", "📰 Catalyst Feed", "⚡ Execution Commands"],
+        ["🦅 Master Dashboard", "📡 Macro Matrix", "🎯 Kill Zone Radar", "📰 Catalyst Feed", "⚡ Execution Commands"],
         horizontal=True, label_visibility="collapsed",
     )
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # MODULE 0 — MASTER DASHBOARD (50-stock institutional table + BLACK RAVEN)
+    # ════════════════════════════════════════════════════════════════════════
+    if br_mod == "🦅 Master Dashboard":
+        section("MASTER WATCHLIST — 50 CORE STOCKS  •  Spenders vs. Receivers  •  Live Algorithmic Alerts")
+
+        with st.spinner("Running BLACK RAVEN sweep across 50 tickers…"):
+            raven_df = load_raven_dashboard()
+
+        if raven_df.empty:
+            st.error("BLACK RAVEN sweep failed — no data returned.")
+        else:
+            # Alert distribution summary
+            _n_risk  = int(raven_df["RAVEN"].str.contains("VaR|DE-GROSSING|ILLIQUIDITY").sum())
+            _n_entry = int(raven_df["RAVEN"].str.contains("LIMIT ORDER|KILL ZONE").sum())
+            _n_warn  = int(raven_df["RAVEN"].str.contains("SPOT UP|EXTENDED|200-SMA").sum())
+            _n_safe  = int(raven_df["RAVEN"].str.contains("SAFE").sum())
+            _sm = st.columns(4)
+            for _c, (_lbl, _n, _clr) in zip(_sm, [
+                ("🚨 Risk Events", _n_risk, "#ef4444"), ("🎯 Entry Signals", _n_entry, "#10b981"),
+                ("⚠️ Tactical Warnings", _n_warn, "#f59e0b"), ("🟢 Safe / Stable", _n_safe, "#5DC7D6"),
+            ]):
+                _c.markdown(f"""<div class='kpi-tile' style='border-top:2px solid {_clr}'>
+                    <div class='kpi-label'>{_lbl}</div>
+                    <div class='kpi-value' style='color:{_clr}'>{_n}</div>
+                </div>""", unsafe_allow_html=True)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+            _tier_meta = {
+                1: ("TIER 1 — ULTIMATE CONVICTION", "Monopolies, Absolute Scarcity & Pricing Power", "#10b981"),
+                2: ("TIER 2 — HIGH CONVICTION", "Test, Measurement, Optics & Infrastructure Layer", "#5DC7D6"),
+                3: ("TIER 3 — MEDIUM CONVICTION", "Policy Beta, Integration & Defensive Hedges", "#f59e0b"),
+                4: ("TIER 4 — DANGER ZONE", "Spenders, Leveraged Cloud & OEMs Without Pricing Power — Avoid / Short Legs Only", "#ef4444"),
+            }
+            for _tier in [1, 2, 3, 4]:
+                _sub = raven_df[raven_df["Tier"] == _tier]
+                if _sub.empty:
+                    continue
+                _tl, _td, _tc = _tier_meta[_tier]
+                st.markdown(f"""<div style='margin:14px 0 8px'>
+                    <span style='background:{_tc}22;color:{_tc};font-size:.78rem;font-weight:800;
+                                 padding:4px 14px;border-radius:99px;letter-spacing:.06em'>{_tl}</span>
+                    <span style='font-size:.72rem;color:#475467;margin-left:10px'>{_td}</span>
+                </div>""", unsafe_allow_html=True)
+
+                _rows = []
+                for _, _r in _sub.iterrows():
+                    _dist = _r["Dist_Entry%"]
+                    _dist_s = f"{_dist:+.1f}%" if isinstance(_dist, (int, float)) and not pd.isna(_dist) else "—"
+                    _dist_c = "#10b981" if isinstance(_dist, (int, float)) and not pd.isna(_dist) and _dist <= 0 else "#f59e0b"
+                    _entry_s = f"${_r['Entry_Price']:,.2f}" if isinstance(_r["Entry_Price"], (int, float)) and not pd.isna(_r["Entry_Price"]) else "—"
+                    _r1d = _r["Ret_1d%"]
+                    _r1d_c = "#10b981" if isinstance(_r1d, (int, float)) and _r1d >= 0 else "#ef4444"
+                    _rows.append(f"""<tr style='border-bottom:1px solid #1E2832'>
+                        <td style='padding:8px 10px;font-weight:800;color:#fffffe'>{_r["Ticker"]}</td>
+                        <td style='padding:8px 10px;color:#d5d4d0'>{_r["Company"]}</td>
+                        <td style='padding:8px 10px;color:#a2b6df;font-size:.78rem'>{_r["Sector"]}</td>
+                        <td style='padding:8px 10px;color:#a2b6df;font-size:.78rem'>{_r["Entry_Rule"]}<br>
+                            <span style='color:#fffffe;font-weight:700'>{_entry_s}</span></td>
+                        <td style='padding:8px 10px;color:#fffffe;font-weight:700'>${_r["Price"]:,.2f}<br>
+                            <span style='font-size:.72rem;color:{_r1d_c}'>{_r1d:+.2f}% 1d</span></td>
+                        <td style='padding:8px 10px;color:{_dist_c};font-weight:700'>{_dist_s}</td>
+                        <td style='padding:8px 10px'><span style='background:{_r["RavenColor"]}18;color:{_r["RavenColor"]};
+                            font-size:.72rem;font-weight:800;padding:3px 10px;border-radius:99px'>{_r["RAVEN"]}</span></td>
+                    </tr>""")
+
+                st.markdown(f"""<div style='border-radius:12px;overflow-x:auto;border:1px solid #1E2832'>
+                <table style='width:100%;border-collapse:collapse;background:#101828;min-width:900px'>
+                    <thead><tr style='background:#0d141c;border-bottom:1px solid #1E2832'>
+                        {''.join(f"<th style='padding:8px 10px;color:#a2b6df;font-size:.68rem;font-weight:800;text-transform:uppercase;text-align:left;letter-spacing:.05em'>{h}</th>"
+                                 for h in ["Ticker","Company","Hardware Sector","Optimal Entry","Price","Dist to Entry","BLACK RAVEN"])}
+                    </tr></thead>
+                    <tbody>{''.join(_rows)}</tbody>
+                </table></div>""", unsafe_allow_html=True)
+
+            st.caption("BLACK RAVEN alert engine: VaR breach → CTA de-grossing → illiquidity trap → Spot Up/Vol Up → "
+                       "structure breaks → limit-order triggers → kill zones. Limit orders only at algorithmic support zones — never chase thin books.")
 
     # ════════════════════════════════════════════════════════════════════════
     # MODULE 1 — MACRO & LIQUIDITY MATRIX

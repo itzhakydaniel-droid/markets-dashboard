@@ -11,41 +11,71 @@ import numpy as np
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# ── Universe Definition ───────────────────────────────────────────────────────
+# ── Master Watchlist — 50 core stocks, institutional ranking ─────────────────
+# Entry types: sma50 / sma100 / sma200 → limit order at that moving average.
+# "special" → discretionary structural rule (textual); 50-SMA shown as anchor.
 
-TIER_UNIVERSE: dict[int, dict[str, str]] = {
-    1: {
-        "TSM":  "TSMC — Sole EUV Wafer Foundry, 92% advanced-node monopoly",
-        "ASML": "ASML — Only EUV lithography machine supplier on Earth",
-        "NVDA": "NVIDIA — GPU/Accelerator monopoly, H100/B200 perpetual backlog",
-        "VRT":  "Vertiv — Mission-critical power & liquid cooling for hyperscaler DC",
-        "POWL": "Powell Industries — High-voltage electrical switchgear, DC power",
-    },
-    2: {
-        "GLW":  "Corning — Glass substrates, optical fiber, AI interconnect",
-        "AMAT": "Applied Materials — CVD/PVD deposition equipment, gate-all-around",
-        "LRCX": "Lam Research — Etch/deposition, EUV mask blank monopoly",
-        "CEG":  "Constellation Energy — Nuclear baseload for hyperscaler PPAs",
-        "VST":  "Vistra — Natural gas + nuclear peaker, signed DC power contracts",
-        "ETN":  "Eaton — Power management / UPS for AI data centers",
-        "NVT":  "nVent Electric — Thermal management, liquid cooling enclosures",
-    },
-    3: {
-        "ONTO": "Onto Innovation — Advanced packaging inspection, metrology",
-        "AMD":  "AMD — EPYC CPUs, MI300X GPU challenger, custom AI silicon",
-        "MRVL": "Marvell — Custom AI ASIC (Google TPU), optical interconnect",
-        "CAMT": "Camtek — Wafer bump inspection for advanced packaging",
-        "LITE": "Lumentum — Optical transceivers, 800G data center interconnect",
-    },
-    4: {
-        "MSFT": "AVOID — AI CapEx consumer (renting NVDA GPUs), not a producer",
-        "ORCL": "AVOID — Cloud margin erosion, AI software execution risk",
-        "PLTR": "AVOID — AI software dream, no physical moat, valuation stretched",
-        "GOOG": "AVOID — Renting NVDA GPUs ($920M+/mo), structural CapEx drag",
-        "SMCI": "AVOID — Margin collapse, audit risk, commoditised server assembly",
-        "INTC": "AVOID — Structural fab market-share loss, execution uncertainty",
-    },
+MASTER_WATCHLIST: dict[str, dict] = {
+    # ── TIER 1: Ultimate Conviction — monopolies, scarcity, pricing power ─────
+    "NVDA":      {"tier": 1, "name": "Nvidia",              "sector": "GPU Compute",              "entry": "sma50",  "entry_note": "50-Day SMA"},
+    "TSM":       {"tier": 1, "name": "Taiwan Semi",         "sector": "Foundry Monopoly",         "entry": "sma100", "entry_note": "100-Day SMA"},
+    "ASML":      {"tier": 1, "name": "ASML",                "sector": "EUV Lithography",          "entry": "sma100", "entry_note": "100-Day SMA"},
+    "MU":        {"tier": 1, "name": "Micron",              "sector": "High-Bandwidth Memory",    "entry": "sma100", "entry_note": "100-Day SMA"},
+    "000660.KS": {"tier": 1, "name": "SK Hynix",            "sector": "HBM Leader",               "entry": "special","entry_note": "Deep intra-day pullbacks"},
+    "VRT":       {"tier": 1, "name": "Vertiv",              "sector": "Thermal / Liquid Cooling", "entry": "sma50",  "entry_note": "50-Day SMA"},
+    "ETN":       {"tier": 1, "name": "Eaton",               "sector": "Power Grid Infra",         "entry": "special","entry_note": "Bottom of rising channel"},
+    "AVGO":      {"tier": 1, "name": "Broadcom",            "sector": "Custom Silicon / Network", "entry": "sma100", "entry_note": "100-Day SMA"},
+    "MRVL":      {"tier": 1, "name": "Marvell",             "sector": "Silicon Photonics",        "entry": "sma200", "entry_note": "200-Day SMA"},
+    "2327.TW":   {"tier": 1, "name": "Yageo",               "sector": "MLCC Passives",            "entry": "special","entry_note": "Breakout retests"},
+    "MRAAY":     {"tier": 1, "name": "Murata",              "sector": "High-Reliability Passives","entry": "sma200", "entry_note": "200-Day SMA"},
+    "TTDKY":     {"tier": 1, "name": "TDK",                 "sector": "HV Power Components",      "entry": "special","entry_note": "Scaled pullbacks"},
+    "ASX":       {"tier": 1, "name": "ASE Technology",      "sector": "Advanced Packaging",       "entry": "sma50",  "entry_note": "50-Day SMA"},
+    "AMKR":      {"tier": 1, "name": "Amkor",               "sector": "US Advanced Packaging",    "entry": "sma100", "entry_note": "100-Day SMA"},
+    "ANET":      {"tier": 1, "name": "Arista Networks",     "sector": "Cloud Switching",          "entry": "sma50",  "entry_note": "50-Day SMA"},
+    # ── TIER 2: High Conviction — test, measurement, optics, infra layer ──────
+    "AMAT":      {"tier": 2, "name": "Applied Materials",   "sector": "Wafer Fab Equipment",      "entry": "sma100", "entry_note": "100-Day SMA"},
+    "LRCX":      {"tier": 2, "name": "Lam Research",        "sector": "Memory Etch Equipment",    "entry": "special","entry_note": "Sector pullbacks"},
+    "KLAC":      {"tier": 2, "name": "KLA Corp",            "sector": "Yield / Metrology",        "entry": "sma100", "entry_note": "100-Day SMA"},
+    "TER":       {"tier": 2, "name": "Teradyne",            "sector": "SoC / AI Testing",         "entry": "sma200", "entry_note": "Strict limit at 200-Day SMA"},
+    "COHU":      {"tier": 2, "name": "Cohu",                "sector": "Thermal Test / Handling",  "entry": "special","entry_note": "Short-term channel bottom"},
+    "ONTO":      {"tier": 2, "name": "Onto Innovation",     "sector": "Packaging Metrology",      "entry": "special","entry_note": "10%+ pullback from highs"},
+    "CAMT":      {"tier": 2, "name": "Camtek",              "sector": "3D Optical Inspection",    "entry": "sma100", "entry_note": "100-Day SMA support"},
+    "FORM":      {"tier": 2, "name": "FormFactor",          "sector": "Probe Cards",              "entry": "special","entry_note": "Trading channel bottom"},
+    "COHR":      {"tier": 2, "name": "Coherent",            "sector": "Optics / Lasers",          "entry": "special","entry_note": "Extreme depth pullbacks"},
+    "AAOI":      {"tier": 2, "name": "Applied Opto",        "sector": "800G Transceivers",        "entry": "sma50",  "entry_note": "50-Day SMA"},
+    "LITE":      {"tier": 2, "name": "Lumentum",            "sector": "Optical Routing",          "entry": "sma200", "entry_note": "200-Day SMA"},
+    "CRDO":      {"tier": 2, "name": "Credo Technology",    "sector": "High-Speed AEC Cables",    "entry": "special","entry_note": "Volume confirmed breakout"},
+    "ALAB":      {"tier": 2, "name": "Astera Labs",         "sector": "PCIe / Connectivity",      "entry": "special","entry_note": "Structural support zones"},
+    "NVTS":      {"tier": 2, "name": "Navitas Semi",        "sector": "GaN Power Efficiency",     "entry": "special","entry_note": "Aggressive red days"},
+    "ALGM":      {"tier": 2, "name": "Allegro Micro",       "sector": "Power ICs / Physical AI",  "entry": "sma200", "entry_note": "200-Day SMA"},
+    # ── TIER 3: Medium Conviction — policy beta, integration, hedges ──────────
+    "POWL":      {"tier": 3, "name": "Powell Industries",   "sector": "Electrical Enclosures",    "entry": "sma50",  "entry_note": "50-Day SMA"},
+    "NVT":       {"tier": 3, "name": "nVent Electric",      "sector": "Liquid Cooling Enclosures","entry": "sma100", "entry_note": "100-Day SMA"},
+    "GEV":       {"tier": 3, "name": "GE Vernova",          "sector": "Grid Power Generation",    "entry": "special","entry_note": "Post-breakout consolidation"},
+    "PWR":       {"tier": 3, "name": "Quanta Services",     "sector": "Grid Contracting",         "entry": "special","entry_note": "Long-term accumulation"},
+    "MOD":       {"tier": 3, "name": "Modine",              "sector": "Thermal / HVAC",           "entry": "sma100", "entry_note": "100-Day SMA"},
+    "MKSI":      {"tier": 3, "name": "MKS Instruments",     "sector": "Vacuum / Lasers WFE",      "entry": "sma200", "entry_note": "200-Day SMA"},
+    "PENG":      {"tier": 3, "name": "Penguin Solutions",   "sector": "AI Infra Integration",     "entry": "sma100", "entry_note": "100-Day SMA"},
+    "WDC":       {"tier": 3, "name": "Western Digital",     "sector": "Storage / NAND",           "entry": "sma50",  "entry_note": "50-Day SMA"},
+    "ARM":       {"tier": 3, "name": "Arm Holdings",        "sector": "Power-Efficient Arch",     "entry": "sma100", "entry_note": "100-Day SMA"},
+    "AMD":       {"tier": 3, "name": "AMD",                 "sector": "Alt Compute Hedge",        "entry": "sma200", "entry_note": "200-Day SMA"},
+    "QCOM":      {"tier": 3, "name": "Qualcomm",            "sector": "Edge AI Processing",       "entry": "special","entry_note": "Deep macro pullbacks"},
+    "PLTR":      {"tier": 3, "name": "Palantir",            "sector": "AI Enterprise OS",         "entry": "sma50",  "entry_note": "50-Day SMA"},
+    # ── TIER 4: DANGER ZONE — spenders, leveraged cloud, no pricing power ─────
+    "SMCI":      {"tier": 4, "name": "Super Micro",         "sector": "OEM Margin Squeeze",       "entry": "avoid",  "entry_note": "Avoid / Short"},
+    "DELL":      {"tier": 4, "name": "Dell",                "sector": "ODM Bypass Risk",          "entry": "avoid",  "entry_note": "Underweight"},
+    "HPE":       {"tier": 4, "name": "HP Enterprise",       "sector": "Legacy Server Margin",     "entry": "avoid",  "entry_note": "Avoid"},
+    "META":      {"tier": 4, "name": "Meta Platforms",      "sector": "High CapEx / ROI Unproven","entry": "avoid",  "entry_note": "Underweight"},
+    "GOOGL":     {"tier": 4, "name": "Alphabet",            "sector": "Infra Cost Compression",   "entry": "avoid",  "entry_note": "Neutral / Underweight"},
+    "MSFT":      {"tier": 4, "name": "Microsoft",           "sector": "Premium Valuation",        "entry": "avoid",  "entry_note": "Underweight"},
+    "AMZN":      {"tier": 4, "name": "Amazon",              "sector": "Utility / Power Costs",    "entry": "avoid",  "entry_note": "Pairs trading only"},
+    "ORCL":      {"tier": 4, "name": "Oracle",              "sector": "Debt-Funded DC Buildout",  "entry": "avoid",  "entry_note": "Short-term trading only"},
 }
+
+# Backwards-compatible tier→{ticker: "Name — sector"} view used by fetch_tier_radar
+TIER_UNIVERSE: dict[int, dict[str, str]] = {}
+for _tk, _m in MASTER_WATCHLIST.items():
+    TIER_UNIVERSE.setdefault(_m["tier"], {})[_tk] = f"{_m['name']} — {_m['sector']}"
 
 MACRO_INSTRUMENTS: dict[str, str] = {
     "US 10Y":   "^TNX",
@@ -435,3 +465,137 @@ def compute_hedge_params(
         "breadth_weak":  breadth_weak,
         "regime_signal": "BUY FLUSH" if extreme_fear else ("HEDGE" if (overbought or low_vol) else "NEUTRAL"),
     }
+
+
+# ── BLACK RAVEN master dashboard — 6-column institutional table ───────────────
+
+def _raven_alert(d: dict, vix_up: bool) -> tuple[str, str]:
+    """
+    Classify the real-time algorithmic alert status for one stock.
+    Priority-ordered: risk events first, then entries, then state.
+    Returns (alert_text, color_hex).
+    """
+    price   = d["price"]
+    ret_1d  = d["ret_1d"]
+    ret_5d  = d["ret_5d"]
+    atr_pct = d["atr_pct"] or 1.5
+    sma20, sma50, sma100, sma200 = d["sma20"], d["sma50"], d["sma100"], d["sma200"]
+    entry_px = d["entry_px"]
+
+    # 1. VaR-style shock: one-day move beyond 2.5× normal range
+    if ret_1d <= -2.5 * atr_pct or ret_1d <= -7:
+        return ("VaR LIMIT BREACHED — forced de-risking flow", "#ef4444")
+
+    # 2. CTA de-grossing: below 20/50/100 SMA stack with momentum bleed
+    below = sum(1 for m in (sma20, sma50, sma100) if m and price < m)
+    if below == 3 and ret_5d < -4:
+        return ("CTA DE-GROSSING — trend models flipping short", "#ef4444")
+
+    # 3. Illiquidity trap: violent move vs its own normal range
+    if abs(ret_1d) >= 2.0 * atr_pct and abs(ret_1d) >= 4:
+        return ("ILLIQUIDITY TRAP — thin book, violent tape", "#f97316")
+
+    # 4. Spot Up / Vol Up anomaly: stock rallying while VIX rises
+    if vix_up and ret_1d >= 1.5:
+        return ("SPOT UP / VOL UP — hedged rally, tactical warning", "#f59e0b")
+
+    # 5. 200-SMA lost (structure break, not yet capitulation)
+    if sma200 and price < sma200 and ret_5d > -4:
+        return ("200-SMA LOST — long-term structure broken", "#f97316")
+
+    # 6. Limit order zone: within ±1.5% of designated entry SMA
+    if entry_px and abs(price / entry_px - 1) * 100 <= 1.5:
+        return (f"LIMIT ORDER TRIGGERED @ {d['entry_note']}", "#10b981")
+
+    # 7. Kill zone: 1.5–5% below entry level → accumulation window
+    if entry_px and price < entry_px and (entry_px / price - 1) * 100 <= 5:
+        return ("KILL ZONE — accumulate with limits", "#06b6d4")
+
+    # 8. Extended: >12% above entry level → chase risk
+    if entry_px and (price / entry_px - 1) * 100 >= 12:
+        return ("EXTENDED — no chase, wait for flush", "#f59e0b")
+
+    return ("SAFE / STABLE", "#10b981")
+
+
+def fetch_raven_dashboard() -> pd.DataFrame:
+    """
+    Build the mandatory 6-column BLACK RAVEN dashboard table for the
+    50-stock master watchlist:
+      Ticker | Company | Tier | Hardware Sector | Optimal Entry | BLACK RAVEN
+    All prices computed from ~1y of daily bars, fetched in parallel.
+    """
+    from src.data.price_fetcher import fetch_history_robust
+    from concurrent.futures import ThreadPoolExecutor
+
+    start = (datetime.now() - timedelta(days=330)).strftime("%Y-%m-%d")
+
+    # Market-level Spot/Vol context (VIX day change)
+    vix_up = False
+    try:
+        vix = fetch_history_robust("^VIX", (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d"))
+        if vix is not None and len(vix) >= 2:
+            vix_up = float(vix.iloc[-1]) > float(vix.iloc[-2]) * 1.03
+    except Exception:
+        pass
+
+    def _one(item):
+        ticker, meta = item
+        try:
+            s = fetch_history_robust(ticker, start)
+            if s is None or s.empty or len(s) < 30:
+                return None
+            s = s.dropna().sort_index()
+            price = float(s.iloc[-1])
+
+            def _sma(n):
+                return float(s.tail(n).mean()) if len(s) >= n else None
+
+            sma20, sma50, sma100, sma200 = _sma(20), _sma(50), _sma(100), _sma(200)
+            daily = s.pct_change().dropna()
+            atr_pct = round(float(daily.tail(20).abs().mean()) * 100, 2) if len(daily) >= 20 else None
+
+            entry_map = {"sma50": sma50, "sma100": sma100, "sma200": sma200}
+            entry_px = entry_map.get(meta["entry"], sma50 if meta["entry"] == "special" else None)
+
+            d = {
+                "price": price,
+                "ret_1d": round((price / float(s.iloc[-2]) - 1) * 100, 2) if len(s) >= 2 else 0.0,
+                "ret_5d": round((price / float(s.iloc[-6]) - 1) * 100, 2) if len(s) >= 6 else 0.0,
+                "atr_pct": atr_pct,
+                "sma20": sma20, "sma50": sma50, "sma100": sma100, "sma200": sma200,
+                "entry_px": entry_px, "entry_note": meta["entry_note"],
+            }
+
+            if meta["tier"] == 4:
+                alert, color = (f"DANGER ZONE — {meta['entry_note'].upper()}", "#ef4444")
+            else:
+                alert, color = _raven_alert(d, vix_up)
+
+            dist = round((price / entry_px - 1) * 100, 1) if entry_px else None
+            return {
+                "Ticker":      ticker,
+                "Company":     meta["name"],
+                "Tier":        meta["tier"],
+                "Sector":      meta["sector"],
+                "Entry_Rule":  meta["entry_note"],
+                "Entry_Price": round(entry_px, 2) if entry_px else None,
+                "Price":       round(price, 2),
+                "Dist_Entry%": dist,
+                "Ret_1d%":     d["ret_1d"],
+                "RAVEN":       alert,
+                "RavenColor":  color,
+            }
+        except Exception:
+            return None
+
+    rows = []
+    with ThreadPoolExecutor(max_workers=16) as ex:
+        for r in ex.map(_one, MASTER_WATCHLIST.items()):
+            if r is not None:
+                rows.append(r)
+
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df = df.sort_values(["Tier", "Dist_Entry%"], ascending=[True, True], na_position="last")
+    return df
