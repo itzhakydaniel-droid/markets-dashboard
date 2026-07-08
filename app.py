@@ -1198,15 +1198,12 @@ with tab_heat_stocks:
         if not _today_etfs.empty:
             etf_quotes = load_quotes(tuple(_today_etfs["ETF"].tolist()))
             if not etf_quotes.empty:
-                # Merge sector name in
+                # Show sector names as tile labels (no duplicate columns)
                 etf_map = dict(zip(_today_etfs["ETF"], _today_etfs["Sector"]))
-                etf_quotes["Sector"] = etf_quotes["Ticker"].map(etf_map)
+                _etf_view = etf_quotes.copy()
+                _etf_view["Ticker"] = _etf_view["Ticker"].map(lambda t: etf_map.get(t, t))
                 st.plotly_chart(
-                    stocks_heatmap(etf_quotes.rename(columns={"Sector": "Ticker"}).assign(
-                        Ticker=etf_quotes.apply(
-                            lambda r: f"{etf_map.get(r['Ticker'], r['Ticker'])}", axis=1
-                        )
-                    ), title="Sector ETF Heatmap — Today"),
+                    stocks_heatmap(_etf_view, title="Sector ETF Heatmap — Today"),
                     use_container_width=True
                 )
 
