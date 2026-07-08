@@ -831,14 +831,23 @@ def macro_liquidity_chart(macro_dict: dict) -> go.Figure:
     return fig
 
 
-def intraday_live_chart(series_map: dict[str, pd.Series], label_map: dict[str, str] | None = None) -> go.Figure:
+def intraday_live_chart(
+    series_map: dict[str, pd.Series],
+    label_map: dict[str, str] | None = None,
+    title: str = "Live Intraday  •  Today's Session  •  % vs Open",
+) -> go.Figure:
     """
-    Live intraday performance chart — each ticker normalized to % change
-    from its first bar of the day. Expects {ticker: pd.Series of closes}.
+    Live performance chart — each ticker normalized to % change
+    from its first bar in the window. Expects {ticker: pd.Series of closes}.
     """
     label_map = label_map or {}
     palette = [TEAL, MAGENTA, YELLOW, BLUE, GREEN, PURPLE]
     fig = go.Figure()
+
+    # multi-day windows need date ticks, single-day needs clock ticks
+    _spans = [(s.index[-1] - s.index[0]).days for s in series_map.values() if s is not None and len(s) > 1]
+    _multi_day = bool(_spans) and max(_spans) >= 2
+    _tickfmt = "%d %b" if _multi_day else "%H:%M"
 
     for i, (ticker, s) in enumerate(series_map.items()):
         if s is None or len(s) < 2:
@@ -858,12 +867,12 @@ def intraday_live_chart(series_map: dict[str, pd.Series], label_map: dict[str, s
         ))
 
     fig.add_hline(y=0, line=dict(color=DIM, width=1, dash="dot"))
-    _apply(fig, h=310, title="Live Intraday  •  Today's Session  •  % vs Open")
+    _apply(fig, h=310, title=title)
     fig.update_layout(
         legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1.0,
                     font=dict(size=11, color=TEXT), bgcolor="rgba(0,0,0,0)"),
         yaxis=dict(ticksuffix="%", showgrid=True, gridcolor=GRID, zeroline=False),
-        xaxis=dict(showgrid=False, tickformat="%H:%M"),
+        xaxis=dict(showgrid=False, tickformat=_tickfmt),
         margin=dict(l=14, r=14, t=48, b=14),
         hovermode="x unified",
     )

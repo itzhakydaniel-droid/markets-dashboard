@@ -291,12 +291,12 @@ def load_rs(tickers):
     return fetch_relative_strength(list(tickers))
 
 @st.cache_data(ttl=120, show_spinner=False)
-def load_vix():
-    return fetch_vix_history(252)
+def load_vix(days: int = 252):
+    return fetch_vix_history(days)
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_sector_perf():
-    return fetch_sector_performance(["1d", "5d", "1mo"])
+    return fetch_sector_performance(["1d", "5d", "1mo", "3mo", "6mo", "1y"])
 
 @st.cache_data(ttl=600, show_spinner=False)          # breadth is slow to compute — cache longer
 def load_breadth():
@@ -338,8 +338,8 @@ def load_tape_quotes():
     ])
 
 @st.cache_data(ttl=120, show_spinner=False)          # intraday bars for live charts + sparklines
-def load_intraday(tickers):
-    return fetch_intraday_multi(list(tickers), interval="5m", range_="1d")
+def load_intraday(tickers, interval: str = "5m", range_: str = "1d"):
+    return fetch_intraday_multi(list(tickers), interval=interval, range_=range_)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def kpi(label, value, delta=None, delta_positive=None, accent=None):
@@ -665,14 +665,30 @@ st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 # ══════════════════════════════════════════════════════════════════════════════
 # LIVE INTRADAY CHART — indices vs open, today's session
 # ══════════════════════════════════════════════════════════════════════════════
-_idx_intraday = {t: s for t, s in _intraday.items() if t in ("SPY", "QQQ", "IWM")}
-if _idx_intraday:
-    with st.expander("📡 Live Intraday Chart — Today's Session", expanded=True):
+with st.expander("📡 Live Market Chart — Indices vs Open", expanded=True):
+    _live_range = st.radio(
+        "Range", ["1D", "5D", "1M", "3M"], index=0, horizontal=True,
+        key="live_chart_range", label_visibility="collapsed",
+    )
+    _range_cfg = {
+        "1D": ("5m",  "1d"),
+        "5D": ("15m", "5d"),
+        "1M": ("1h",  "1mo"),
+        "3M": ("1d",  "3mo"),
+    }[_live_range]
+    if _live_range == "1D":
+        _live_series = {t: s for t, s in _intraday.items() if t in ("SPY", "QQQ", "IWM")}
+    else:
+        _live_series = load_intraday(("SPY", "QQQ", "IWM"), _range_cfg[0], _range_cfg[1])
+    if _live_series:
         st.plotly_chart(
-            intraday_live_chart(_idx_intraday,
-                {"SPY": "S&P 500", "QQQ": "Nasdaq 100", "IWM": "Russell 2000"}),
+            intraday_live_chart(_live_series,
+                {"SPY": "S&P 500", "QQQ": "Nasdaq 100", "IWM": "Russell 2000"},
+                title=f"Live — {_live_range} • % Change"),
             use_container_width=True, config={"displayModeBar": False},
         )
+    else:
+        st.info("Live chart data unavailable right now.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # LIVE WATCHLIST — real-time quotes + sparklines for every watchlist ticker
@@ -954,6 +970,20 @@ with tab_watch:
             </table>
             </div>""", unsafe_allow_html=True)
 
+        # ── Relative strength across horizons ────────────────────────────────
+        _rs_multi = [c for c in merged.columns if c.startswith("RS ") and "vs" not in c]
+        if _rs_multi:
+            st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+            section("Relative Strength vs SPY — 1M / 3M / 6M / 1Y")
+            _rs_view = merged[["Ticker"] + _rs_multi].set_index("Ticker")
+            st.dataframe(
+                _rs_view.style
+                    .format("{:+.2f}", na_rep="—")
+                    .map(lambda v: "color:#10b981;font-weight:700" if isinstance(v,(int,float)) and v >= 0
+                         else ("color:#ef4444;font-weight:700" if isinstance(v,(int,float)) else "color:#475467")),
+                use_container_width=True, height=min(420, 38 * (len(_rs_view) + 1)),
+            )
+
         # ── Quick jump buttons ────────────────────────────────────────────────
         st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
         section("Quick Review Jump")
@@ -1061,12 +1091,13 @@ with tab_heat_stocks:
             sector_df = load_sector_perf()
 
     if not sector_df.empty:
-        p_col, _ = st.columns([3, 5])
+        _PERIOD_LBL = {"1d":"Today","5d":"1 Week","1mo":"1 Month","3mo":"3 Months","6mo":"6 Months","1y":"1 Year"}
+        p_col, _ = st.columns([5, 3])
         with p_col:
             period_choice = st.radio(
-                "Timeframe", ["1d","5d","1mo"], horizontal=True, index=0,
+                "Timeframe", ["1d","5d","1mo","3mo","6mo","1y"], horizontal=True, index=0,
                 key="heatmap_period",
-                format_func=lambda x: {"1d":"Today","5d":"1 Week","1mo":"1 Month"}[x],
+                format_func=lambda x: _PERIOD_LBL[x],
             )
 
         hm_col, bar_col = st.columns([3, 2])
@@ -1077,14 +1108,16 @@ with tab_heat_stocks:
 
         section("Sector Performance Table — All Timeframes")
         pivot = sector_df.pivot_table(values="Return %", index="Sector", columns="Period")
-        pivot = pivot.reindex(columns=["1d","5d","1mo"]).rename(
-            columns={"1d":"Today %","5d":"1 Week %","1mo":"1 Month %"})
+        _pcols  = ["1d","5d","1mo","3mo","6mo","1y"]
+        _pnames = ["Today %","1 Week %","1 Month %","3 Months %","6 Months %","1 Year %"]
+        pivot = pivot.reindex(columns=_pcols).rename(columns=dict(zip(_pcols,_pnames)))
+        pivot = pivot.dropna(axis=1, how="all")
         pivot = pivot.sort_values("Today %", ascending=False)
 
         sec_rows_html = []
         for sector, row in pivot.iterrows():
             td_html = f"<td style='padding:10px 14px;color:#d1d5db;font-weight:600'>{sector}</td>"
-            for col_name in ["Today %","1 Week %","1 Month %"]:
+            for col_name in pivot.columns:
                 v = row.get(col_name)
                 if pd.isna(v):
                     td_html += "<td style='padding:10px 14px;color:#4b5563'>—</td>"
@@ -1106,9 +1139,7 @@ with tab_heat_stocks:
         <table style='width:100%;border-collapse:collapse;background:#111827'>
             <thead><tr style='background:#0d1117;border-bottom:1px solid #1e2533'>
                 <th style='padding:10px 14px;color:#9ca3af;font-size:.72rem;font-weight:700;text-transform:uppercase;text-align:left'>Sector</th>
-                <th style='padding:10px 14px;color:#9ca3af;font-size:.72rem;font-weight:700;text-transform:uppercase;text-align:left'>Today</th>
-                <th style='padding:10px 14px;color:#9ca3af;font-size:.72rem;font-weight:700;text-transform:uppercase;text-align:left'>1 Week</th>
-                <th style='padding:10px 14px;color:#9ca3af;font-size:.72rem;font-weight:700;text-transform:uppercase;text-align:left'>1 Month</th>
+                {''.join(f"<th style='padding:10px 14px;color:#9ca3af;font-size:.72rem;font-weight:700;text-transform:uppercase;text-align:left'>{c.replace(' %','')}</th>" for c in pivot.columns)}
             </tr></thead>
             <tbody>{''.join(sec_rows_html)}</tbody>
         </table></div>""", unsafe_allow_html=True)
@@ -1171,8 +1202,13 @@ with tab_breadth:
 # TAB 5 — VOLATILITY & CTA
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_vol:
+    _vix_range = st.radio(
+        "VIX history range", ["6M", "1Y", "2Y", "5Y"], index=1,
+        horizontal=True, key="vix_range", label_visibility="collapsed",
+    )
+    _vix_days = {"6M": 126, "1Y": 252, "2Y": 504, "5Y": 1260}[_vix_range]
     with st.spinner("Loading VIX & CTA data…"):
-        vix_df   = load_vix()
+        vix_df   = load_vix(_vix_days)
         cta_data = _cta_data or load_cta()
         term_df  = fetch_vix_term_structure()
 
@@ -1374,15 +1410,28 @@ with tab_review:
                     st.warning("Price data unavailable.")
             with fund_col:
                 section("Key Metrics")
+                def _fmt_px(v):  return f"${v:,.2f}" if isinstance(v,(int,float)) else "—"
+                def _fmt_pct(v): return f"{v:+.1f}%" if isinstance(v,(int,float)) else "—"
+                _sma50, _sma200 = fund.get("sma50"), fund.get("sma200")
+                _px = fund.get("price")
+                _trend = "—"
+                if isinstance(_px,(int,float)) and isinstance(_sma50,(int,float)):
+                    _trend = "Above 50D ✅" if _px > _sma50 else "Below 50D ⚠️"
                 for lbl, val in [
+                    ("1Y Return",     _fmt_pct(fund.get('ret_1y'))),
+                    ("Volatility (1Y)", f"{fund.get('volatility')}%" if fund.get('volatility') is not None else "—"),
+                    ("Max Drawdown",  _fmt_pct(fund.get('max_drawdown'))),
+                    ("Trend",         _trend),
+                    ("SMA 50",        _fmt_px(_sma50)),
+                    ("SMA 200",       _fmt_px(_sma200)),
+                    ("52W High",      _fmt_px(fund.get('52w_high'))),
+                    ("52W Low",       _fmt_px(fund.get('52w_low'))),
+                    ("Avg Volume",    f"{int(fund.get('avg_volume') or 0):,}" if fund.get('avg_volume') else "—"),
                     ("ROE",           f"{(fund.get('roe') or 0)*100:.1f}%" if fund.get('roe') else "—"),
                     ("Profit Margin", f"{(fund.get('profit_margin') or 0)*100:.1f}%" if fund.get('profit_margin') else "—"),
-                    ("P/B Ratio",     f"{fund.get('pb_ratio','—')}"),
-                    ("Debt/Equity",   f"{fund.get('debt_to_equity','—')}"),
-                    ("Current Ratio", f"{fund.get('current_ratio','—')}"),
-                    ("52W High",      f"${fund.get('52w_high','—')}"),
-                    ("52W Low",       f"${fund.get('52w_low','—')}"),
-                    ("Avg Volume",    f"{int(fund.get('avg_volume') or 0):,}" if fund.get('avg_volume') else "—"),
+                    ("P/B Ratio",     f"{fund.get('pb_ratio') or '—'}"),
+                    ("Debt/Equity",   f"{fund.get('debt_to_equity') or '—'}"),
+                    ("Current Ratio", f"{fund.get('current_ratio') or '—'}"),
                 ]:
                     st.markdown(f"""<div style='display:flex;justify-content:space-between;align-items:center;
                                             padding:7px 0;border-bottom:1px solid #1e2533;font-size:.82rem'>

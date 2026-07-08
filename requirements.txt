@@ -9,3 +9,4 @@ python-dotenv
 anthropic
 beautifulsoup4
 lxml
+curl_cffi
