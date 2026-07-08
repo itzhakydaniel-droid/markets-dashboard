@@ -877,3 +877,62 @@ def intraday_live_chart(
         hovermode="x unified",
     )
     return fig
+
+
+def sector_detail_chart(s: pd.Series, spy: pd.Series | None, name: str) -> go.Figure:
+    """
+    Sector breakdown chart: 2-year price with 50/200-day MAs (top panel)
+    and cumulative relative performance vs SPY (bottom panel).
+    """
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes=True, row_heights=[0.68, 0.32],
+        vertical_spacing=0.06,
+        subplot_titles=(f"{name} — 2-Year Price & Moving Averages", "Relative Performance vs S&P 500 (%)"),
+    )
+
+    fig.add_trace(go.Scatter(
+        x=s.index, y=s.values, name="Price",
+        line=dict(color=TEAL, width=2.2),
+        hovertemplate="%{y:.2f}<extra>Price</extra>",
+    ), row=1, col=1)
+
+    if len(s) >= 50:
+        ma50 = s.rolling(50).mean()
+        fig.add_trace(go.Scatter(
+            x=ma50.index, y=ma50.values, name="SMA 50",
+            line=dict(color=YELLOW, width=1.3, dash="dot"),
+            hovertemplate="%{y:.2f}<extra>SMA 50</extra>",
+        ), row=1, col=1)
+    if len(s) >= 200:
+        ma200 = s.rolling(200).mean()
+        fig.add_trace(go.Scatter(
+            x=ma200.index, y=ma200.values, name="SMA 200",
+            line=dict(color=MAGENTA, width=1.6),
+            hovertemplate="%{y:.2f}<extra>SMA 200</extra>",
+        ), row=1, col=1)
+
+    if spy is not None and not spy.empty:
+        joined = pd.concat([s, spy], axis=1, keys=["sec", "spy"]).dropna()
+        if len(joined) > 5:
+            rel = (joined["sec"] / joined["sec"].iloc[0]) / (joined["spy"] / joined["spy"].iloc[0]) - 1
+            rel_pct = rel * 100
+            fig.add_trace(go.Scatter(
+                x=rel_pct.index, y=rel_pct.values, name="RS vs SPY",
+                line=dict(color=BLUE, width=1.8),
+                fill="tozeroy", fillcolor="rgba(59,130,246,.10)",
+                hovertemplate="%{y:+.1f}%<extra>vs SPY</extra>",
+            ), row=2, col=1)
+            fig.add_hline(y=0, line=dict(color=DIM, width=1, dash="dot"), row=2, col=1)
+
+    _layout = dict(BASE_LAYOUT)
+    _layout.update(
+        height=520,
+        legend=dict(orientation="h", yanchor="bottom", y=1.03, xanchor="right", x=1.0,
+                    font=dict(size=11, color=TEXT), bgcolor="rgba(0,0,0,0)"),
+        hovermode="x unified",
+    )
+    fig.update_layout(**_layout)
+    fig.update_annotations(font=dict(color=MUTED, size=12))
+    fig.update_yaxes(gridcolor=GRID, zeroline=False)
+    fig.update_xaxes(gridcolor=GRID, showgrid=False)
+    return fig

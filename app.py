@@ -53,6 +53,8 @@ try:
         intraday_live_chart,
     )
     from src.data.price_fetcher import fetch_intraday_multi
+    from src.data.sector_rating import fetch_sector_ratings, interpret_sector_score
+    from src.components.charts import sector_detail_chart
     from src.data.ai_engine import (
         ask_ai, generate_market_brief, analyze_ticker,
         _build_market_context, is_ai_available,
@@ -340,6 +342,10 @@ def load_tape_quotes():
 @st.cache_data(ttl=120, show_spinner=False)          # intraday bars for live charts + sparklines
 def load_intraday(tickers, interval: str = "5m", range_: str = "1d"):
     return fetch_intraday_multi(list(tickers), interval=interval, range_=range_)
+
+@st.cache_data(ttl=900, show_spinner=False)          # sector ratings — 2y of bars × 12 ETFs
+def load_sector_ratings():
+    return fetch_sector_ratings(years=2)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def kpi(label, value, delta=None, delta_positive=None, accent=None):
@@ -716,6 +722,103 @@ if not _wl_quotes.empty:
                     {_spk}
                 </div>""", unsafe_allow_html=True)
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SECTOR RATINGS — 10-point method (3M +2 / 6M +2 / YoY +3 / >200DMA +3)
+# ══════════════════════════════════════════════════════════════════════════════
+section("🏆 Sector Ratings — 10-Point System • 2-Year Data")
+try:
+    _ratings = load_sector_ratings()
+except Exception:
+    _ratings = {}
+
+if _ratings:
+    if "selected_sector" not in st.session_state:
+        st.session_state.selected_sector = None
+
+    _ranked = sorted(_ratings.items(), key=lambda kv: kv[1]["total"], reverse=True)
+    _per_row = 6
+    for _start in range(0, len(_ranked), _per_row):
+        _cols = st.columns(_per_row)
+        for _col, (_name, _d) in zip(_cols, _ranked[_start:_start + _per_row]):
+            with _col:
+                _v = _d["verdict"]
+                _fill = int(_d["total"] / 10 * 100)
+                st.markdown(f"""<div class='kpi-tile' style='border-top:2px solid {_v["color"]};padding:11px 8px 8px'>
+                    <div class='kpi-label'>{_name}</div>
+                    <div class='kpi-value' style='color:{_v["color"]};font-size:1.45rem'>{_d["total"]}<span style='font-size:.8rem;color:#475467'>/10</span></div>
+                    <div style='background:#1E2832;border-radius:99px;height:5px;margin:6px 8px 4px'>
+                        <div style='background:{_v["color"]};height:5px;border-radius:99px;width:{_fill}%'></div>
+                    </div>
+                    <div style='font-size:.6rem;color:{_v["color"]};font-weight:700'>{_v["emoji"]} {_v["label"].split("—")[0].strip()}</div>
+                </div>""", unsafe_allow_html=True)
+                if st.button("Breakdown", key=f"sec_btn_{_d['etf']}", use_container_width=True):
+                    st.session_state.selected_sector = None if st.session_state.selected_sector == _name else _name
+
+    # ── Breakdown panel for the clicked sector ────────────────────────────────
+    _sel = st.session_state.selected_sector
+    if _sel and _sel in _ratings:
+        _d = _ratings[_sel]
+        _v = _d["verdict"]
+        st.markdown(f"""<div class='card' style='border-left:4px solid {_v["color"]};margin-top:10px'>
+            <div style='display:flex;align-items:center;gap:14px;flex-wrap:wrap'>
+                <span style='font-size:1.9rem'>{_v["emoji"]}</span>
+                <div>
+                    <div style='font-size:1.25rem;font-weight:800;color:#fffffe'>{_sel}
+                        <span style='background:#1E2832;color:#a2b6df;font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:99px;margin-left:8px'>{_d["etf"]}</span>
+                    </div>
+                    <div style='font-size:.85rem;color:{_v["color"]};font-weight:700;margin-top:2px'>{_v["label"]} • Score {_d["total"]}/10</div>
+                </div>
+                <div style='margin-left:auto;text-align:right'>
+                    <div style='font-size:.68rem;color:#475467;text-transform:uppercase;font-weight:700'>Price</div>
+                    <div style='font-size:1.2rem;font-weight:800;color:#fffffe'>${_d["price"]:,.2f}</div>
+                </div>
+            </div>
+            <div style='font-size:.86rem;color:#a2b6df;line-height:1.75;margin-top:12px'>{_d["situation"]}</div>
+        </div>""", unsafe_allow_html=True)
+
+        # Score components as chips
+        _comp_cols = st.columns(4)
+        for _cc, (_lbl, _pts, _max) in zip(_comp_cols, [
+            ("3-Month Trend",  _d["score_3m"],  2),
+            ("6-Month Trend",  _d["score_6m"],  2),
+            ("YoY Trend",      _d["score_yoy"], 3),
+            ("Above 200-D MA", _d["score_abs"], 3),
+        ]):
+            _cc2 = "#10b981" if _pts == _max else "#ef4444" if _pts == 0 else "#f59e0b"
+            _cc.markdown(f"""<div class='kpi-tile' style='border-top:2px solid {_cc2}'>
+                <div class='kpi-label'>{_lbl}</div>
+                <div class='kpi-value' style='color:{_cc2};font-size:1.3rem'>{_pts}<span style='font-size:.75rem;color:#475467'>/{_max}</span></div>
+                <div style='font-size:.66rem;color:{_cc2};font-weight:700'>{"✅ EARNED" if _pts == _max else "❌ MISSED"}</div>
+            </div>""", unsafe_allow_html=True)
+
+        # Returns / risk row
+        _stat_cols = st.columns(7)
+        for _sc, (_lbl, _val, _sfx) in zip(_stat_cols, [
+            ("1M Return", _d.get("ret_1m"), "%"), ("3M Return", _d.get("ret_3m"), "%"),
+            ("6M Return", _d.get("ret_6m"), "%"), ("1Y Return", _d.get("ret_1y"), "%"),
+            ("2Y Return", _d.get("ret_2y"), "%"), ("RS vs SPY 1Y", _d.get("rs_1y"), "pp"),
+            ("Max Drawdown", _d.get("max_drawdown"), "%"),
+        ]):
+            if isinstance(_val, (int, float)):
+                _c = "#10b981" if _val >= 0 else "#ef4444"
+                _sc.markdown(f"""<div class='kpi-tile' style='padding:10px 6px 8px'>
+                    <div class='kpi-label' style='font-size:.58rem'>{_lbl}</div>
+                    <div style='font-size:1.02rem;font-weight:800;color:{_c}'>{_val:+.1f}{_sfx}</div>
+                </div>""", unsafe_allow_html=True)
+            else:
+                _sc.markdown(f"""<div class='kpi-tile' style='padding:10px 6px 8px'>
+                    <div class='kpi-label' style='font-size:.58rem'>{_lbl}</div>
+                    <div style='font-size:1.02rem;font-weight:800;color:#475467'>—</div>
+                </div>""", unsafe_allow_html=True)
+
+        st.plotly_chart(
+            sector_detail_chart(_d["series"], _d.get("spy"), _sel),
+            use_container_width=True, config={"displayModeBar": False},
+        )
+    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+else:
+    st.info("Sector ratings unavailable — data fetch failed.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TABS
