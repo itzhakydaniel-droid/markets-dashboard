@@ -54,6 +54,7 @@ try:
     )
     from src.data.price_fetcher import fetch_intraday_multi
     from src.data.sector_rating import fetch_sector_ratings, interpret_sector_score
+    from src.data.sector_rotation import fetch_sector_rotation
     from src.components.charts import sector_detail_chart, yield_curve_chart, yield_spread_chart
     from src.data.yield_curve import fetch_yield_curve
     from src.data.ai_engine import (
@@ -355,6 +356,10 @@ def load_raven_dashboard():
 @st.cache_data(ttl=3600, show_spinner=False)         # Treasury yield curve — updates once per day EOD
 def load_yield_curve():
     return fetch_yield_curve(years_back=3)
+
+@st.cache_data(ttl=600, show_spinner=False)          # Sector Rotation Engine — RS math on 11 ETFs
+def load_sector_rotation():
+    return fetch_sector_rotation()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def kpi(label, value, delta=None, delta_positive=None, accent=None):
@@ -1661,10 +1666,102 @@ with tab_raven:
     # ── MODULE SELECTOR ───────────────────────────────────────────────────────
     br_mod = st.radio(
         "Module",
-        ["🦅 Master Dashboard", "📡 Macro Matrix", "🎯 Kill Zone Radar", "📰 Catalyst Feed", "⚡ Execution Commands"],
+        ["🦅 Master Dashboard", "🔄 Sector Rotation", "📡 Macro Matrix", "🎯 Kill Zone Radar", "📰 Catalyst Feed", "⚡ Execution Commands"],
         horizontal=True, label_visibility="collapsed",
     )
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # MODULE — SECTOR ROTATION ENGINE (Institutional Sector Scorecard)
+    # ════════════════════════════════════════════════════════════════════════
+    if br_mod == "🔄 Sector Rotation":
+        section("SECTOR ROTATION ENGINE  •  RS Mathematics × Macro Paradigms  •  Institutional Scorecard")
+
+        with st.spinner("Computing RS ratios, slopes & flow matrix…"):
+            rot_df = load_sector_rotation()
+
+        if rot_df.empty:
+            st.error("Rotation engine returned no data.")
+        else:
+            # ── 1. Sector Ranking Table ──────────────────────────────────────
+            _rows = []
+            for _, _r in rot_df.iterrows():
+                _flow_cells = ""
+                for _h in ["RS_1W", "RS_1M", "RS_3M", "RS_6M", "RS_1Y"]:
+                    _v = _r[_h]
+                    if isinstance(_v, (int, float)) and not pd.isna(_v):
+                        _fc = "#10b981" if _v > 0 else "#ef4444"
+                        _flow_cells += f"<td style='padding:7px 8px;color:{_fc};font-weight:700;font-size:.78rem'>{_v:+.1f}</td>"
+                    else:
+                        _flow_cells += "<td style='padding:7px 8px;color:#475467'>—</td>"
+                _st_c = "#10b981" if "ACCUMULATION" in _r["Slope_State"] else "#ef4444" if "DISTRIBUTION" in _r["Slope_State"] or "NEGATIVE" in _r["Slope_State"] else "#f59e0b"
+                _q_struct = ("✓ RS>QMA" if _r["Above_QMA"] else "✗ RS<QMA") + " · " + ("✓ QMA>YMA" if _r["QMA_gt_YMA"] else "✗ QMA<YMA")
+                _ov = _r["Overlay"]
+                _ov_c = "#10b981" if _ov > 0 else "#ef4444" if _ov < 0 else "#475467"
+                _rows.append(f"""<tr style='border-bottom:1px solid #1E2832'>
+                    <td style='padding:7px 8px;font-weight:800;color:{_r["TierColor"]};font-size:1.02rem'>{_r["Final_Score"]:.1f}</td>
+                    <td style='padding:7px 8px;font-weight:700;color:#fffffe'>{_r["Sector"]}
+                        <span style='color:#475467;font-size:.72rem'>({_r["ETF"]})</span><br>
+                        <span style='font-size:.66rem;color:#a2b6df'>{_q_struct}</span></td>
+                    <td style='padding:7px 8px'><span style='background:{_r["TierColor"]}18;color:{_r["TierColor"]};
+                        font-size:.7rem;font-weight:800;padding:3px 9px;border-radius:99px'>{_r["Tier"]}</span></td>
+                    {_flow_cells}
+                    <td style='padding:7px 8px;color:{_st_c};font-size:.72rem;font-weight:700'>{_r["Slope_State"].split(" — ")[0]}</td>
+                    <td style='padding:7px 8px;color:{_ov_c};font-weight:800'>{_ov:+.0f}</td>
+                    <td style='padding:7px 8px;color:#fffffe;font-weight:700;font-size:.78rem'>${_r["Ambush_50SMA"]:,.2f}<br>
+                        <span style='font-size:.68rem;color:{"#10b981" if _r["Dist_Ambush%"]<=0 else "#f59e0b"}'>{_r["Dist_Ambush%"]:+.1f}% away</span></td>
+                </tr>""")
+
+            st.markdown(f"""<div style='border-radius:12px;overflow-x:auto;border:1px solid #1E2832'>
+            <table style='width:100%;border-collapse:collapse;background:#101828;min-width:1000px'>
+                <thead><tr style='background:#0d141c;border-bottom:1px solid #1E2832'>
+                    {''.join(f"<th style='padding:8px;color:#a2b6df;font-size:.66rem;font-weight:800;text-transform:uppercase;text-align:left;letter-spacing:.05em'>{h}</th>"
+                             for h in ["Score","Sector · RS Structure","Conviction Tier","RS 1W","RS 1M","RS 3M","RS 6M","RS 1Y","Slope","Macro","Ambush 50SMA"])}
+                </tr></thead>
+                <tbody>{''.join(_rows)}</tbody>
+            </table></div>""", unsafe_allow_html=True)
+
+            # ── 2 & 3. Flow analysis + macro alignment ───────────────────────
+            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+            _fa, _ma = st.columns(2)
+            with _fa:
+                section("Slopes & Flow Analysis")
+                _accum = rot_df[rot_df["Slope_State"].str.contains("ACCUMULATION")]["Sector"].tolist()
+                _dist  = rot_df[rot_df["Slope_State"].str.contains("DISTRIBUTION|NEGATIVE")]["Sector"].tolist()
+                st.markdown(f"""<div class='card-sm' style='font-size:.84rem;color:#a2b6df;line-height:1.9'>
+                    <span style='color:#10b981;font-weight:700'>▲ Capital inflows (RS accelerating):</span><br>
+                    {", ".join(_accum) if _accum else "None"}<br><br>
+                    <span style='color:#ef4444;font-weight:700'>▼ Capital outflows (RS deteriorating):</span><br>
+                    {", ".join(_dist) if _dist else "None"}
+                </div>""", unsafe_allow_html=True)
+            with _ma:
+                section("Macro Alignment Check")
+                _notes = []
+                for _, _r in rot_df.iterrows():
+                    if _r["Overlay"] != 0:
+                        _al = "ALIGNED" if (_r["Overlay"] > 0) == (_r["Quant_Score"] >= 5) else "DIVERGENT"
+                        _al_c = "#10b981" if _al == "ALIGNED" else "#f59e0b"
+                        _notes.append(f"<span style='color:{_al_c};font-weight:700'>{_r['ETF']} {_al}</span> — {_r['Overlay_Note']} (quant {_r['Quant_Score']}/10)")
+                st.markdown(f"""<div class='card-sm' style='font-size:.78rem;color:#a2b6df;line-height:2'>
+                    {"<br>".join(_notes)}
+                </div>""", unsafe_allow_html=True)
+
+            # ── 4. Execution directives ──────────────────────────────────────
+            section("Execution Directives — Liquidity Ambush Levels")
+            _top = rot_df[rot_df["Final_Score"] >= 7]
+            if _top.empty:
+                st.info("No sectors currently qualify for capital deployment (score ≥ 7).")
+            else:
+                _ex_cols = st.columns(min(4, len(_top)))
+                for _c, (_, _r) in zip(_ex_cols, _top.iterrows()):
+                    _c.markdown(f"""<div class='kpi-tile' style='border-top:2px solid {_r["TierColor"]}'>
+                        <div class='kpi-label'>{_r["Sector"]} ({_r["ETF"]})</div>
+                        <div class='kpi-value' style='font-size:1.2rem;color:{_r["TierColor"]}'>${_r["Ambush_50SMA"]:,.2f}</div>
+                        <div style='font-size:.64rem;color:#a2b6df;font-weight:600'>BUY LIMIT @ 50SMA · now {_r["Dist_Ambush%"]:+.1f}%</div>
+                    </div>""", unsafe_allow_html=True)
+            st.caption("Engine: RS ratio vs SPY → QMA(63)/YMA(252) structure → 21-bar slope regime → RS Flow matrix "
+                       "(1W/1M/3M/6M/1Y calendar windows) → K-Economy penalty / Economy-of-Shortage premium. "
+                       "Analytical tool — not financial advice.")
 
     # ════════════════════════════════════════════════════════════════════════
     # MODULE 0 — MASTER DASHBOARD (50-stock institutional table + BLACK RAVEN)
