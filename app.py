@@ -700,10 +700,10 @@ with st.expander("📡 Live Market Chart — Indices vs Open", expanded=True):
     else:
         st.info("Live chart data unavailable right now.")
 
-# ══════════════════════════════════════════════════════════════════════════════
-# LIVE WATCHLIST — real-time quotes + sparklines for every watchlist ticker
-# ══════════════════════════════════════════════════════════════════════════════
-if not _wl_quotes.empty:
+def render_live_watchlist():
+    """Live watchlist grid — real-time quotes + sparklines (shown in Watchlist & RS tab)."""
+    if _wl_quotes.empty:
+        return
     section("⚡ Live Watchlist")
     _wl_rows = [r for _, r in _wl_quotes.iterrows() if isinstance(r.get("Price"), (int, float))]
     _per_row = 6
@@ -950,6 +950,7 @@ with tab_macro:
 # TAB 2 — WATCHLIST & RS
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_watch:
+    render_live_watchlist()
     with st.spinner("Loading quotes & relative strength…"):
         quotes_df = load_quotes(tuple(st.session_state.watchlist))
         rs_df     = load_rs(tuple(st.session_state.watchlist))

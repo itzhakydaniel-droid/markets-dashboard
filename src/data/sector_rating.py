@@ -44,11 +44,18 @@ def _score_series(s: pd.Series) -> dict:
     }
 
 
-def _window_ret(s: pd.Series, bars: int) -> float | None:
-    w = s.tail(bars)
-    if len(w) < 2:
+def _window_ret(s: pd.Series, days: int) -> float | None:
+    """Calendar-accurate return: last close vs last close on/before (today - days)."""
+    if s is None or len(s) < 2:
         return None
-    return round(float(w.iloc[-1] / w.iloc[0] - 1) * 100, 2)
+    cutoff = s.index[-1] - pd.Timedelta(days=days)
+    past = s[s.index <= cutoff]
+    if past.empty:
+        return None
+    base = float(past.iloc[-1])
+    if base == 0:
+        return None
+    return round((float(s.iloc[-1]) / base - 1) * 100, 2)
 
 
 def interpret_sector_score(total: int) -> dict:
@@ -130,14 +137,14 @@ def fetch_sector_ratings(years: int = 2) -> dict:
         d = _score_series(s)
         d["etf"] = etf
 
-        # returns across horizons (trading bars)
-        for lbl, bars in [("ret_1m", 22), ("ret_3m", 64), ("ret_6m", 127),
-                          ("ret_1y", 253), ("ret_2y", 506)]:
-            d[lbl] = _window_ret(s, bars)
+        # returns across horizons (calendar-accurate)
+        for lbl, days in [("ret_1m", 30), ("ret_3m", 91), ("ret_6m", 182),
+                          ("ret_1y", 365), ("ret_2y", 730)]:
+            d[lbl] = _window_ret(s, days)
 
         # relative strength vs SPY (12 months)
         if spy is not None:
-            r_s, r_spy = _window_ret(s, 253), _window_ret(spy, 253)
+            r_s, r_spy = _window_ret(s, 365), _window_ret(spy, 365)
             d["rs_1y"] = round(r_s - r_spy, 2) if (r_s is not None and r_spy is not None) else None
 
         # risk stats over the full window

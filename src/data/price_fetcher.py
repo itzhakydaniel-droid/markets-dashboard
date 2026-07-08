@@ -312,10 +312,10 @@ def fetch_relative_strength_robust(
     """
     from concurrent.futures import ThreadPoolExecutor
     if horizons is None:
-        horizons = {"1M": 21, "3M": 63, "6M": 126, "1Y": 252}
-    max_td = max(list(horizons.values()) + [period_days])
-    # trading days → calendar days buffer (~1.5x + pad)
-    start = (datetime.now() - timedelta(days=int(max_td * 1.55) + 20)).strftime("%Y-%m-%d")
+        horizons = {"1M": 30, "3M": 91, "6M": 182, "1Y": 365}  # calendar days
+    legacy_days = int(period_days * 1.45)  # trading days → calendar approx
+    max_days = max(list(horizons.values()) + [legacy_days])
+    start = (datetime.now() - timedelta(days=max_days + 15)).strftime("%Y-%m-%d")
     all_t = list(set(tickers + ["SPY"]))
     series: dict[str, pd.Series] = {}
 
@@ -332,24 +332,21 @@ def fetch_relative_strength_robust(
 
     spy = series["SPY"]
 
-    def _rel(s: pd.Series, td: int) -> float | None:
-        if len(s) < 5 or len(spy) < 5:
+    def _rel(s: pd.Series, days: int) -> float | None:
+        t_ret   = window_return(s, days)
+        spy_ret = window_return(spy, days)
+        if t_ret is None or spy_ret is None:
             return None
-        w  = s.tail(td);  ws = spy.tail(td)
-        if len(w) < 2 or len(ws) < 2:
-            return None
-        t_ret   = w.iloc[-1] / w.iloc[0] - 1
-        spy_ret = ws.iloc[-1] / ws.iloc[0] - 1
-        return round(float(t_ret - spy_ret) * 100, 2)
+        return round(t_ret - spy_ret, 2)
 
     rows = []
     for t in tickers:
         if t not in series:
             continue
         row: dict = {"Ticker": t}
-        row[f"RS vs SPY ({period_days}d)"] = _rel(series[t], period_days)
-        for name, td in horizons.items():
-            row[f"RS {name}"] = _rel(series[t], td)
+        row[f"RS vs SPY ({period_days}d)"] = _rel(series[t], legacy_days)
+        for name, days in horizons.items():
+            row[f"RS {name}"] = _rel(series[t], days)
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -383,13 +380,33 @@ SECTOR_ETFS = {
 }
 
 
+def window_return(s: pd.Series, days: int | None) -> float | None:
+    """
+    Calendar-accurate return %: last close vs last close on/before (today - days).
+    days=None → 1-day return (last close vs previous close).
+    """
+    if s is None or len(s) < 2:
+        return None
+    last = float(s.iloc[-1])
+    if days is None:
+        base = float(s.iloc[-2])
+    else:
+        past = s[s.index <= s.index[-1] - pd.Timedelta(days=days)]
+        if past.empty:
+            return None
+        base = float(past.iloc[-1])
+    if base == 0:
+        return None
+    return round((last / base - 1) * 100, 2)
+
+
 def fetch_sector_performance_robust(periods: list[str] = ["1d", "5d", "1mo"]) -> pd.DataFrame:
     from concurrent.futures import ThreadPoolExecutor
-    # trading-bar windows per label: tail(n) bars → (n-1)-bar return
-    period_days = {"1d": 2, "5d": 6, "1mo": 22, "3mo": 64, "6mo": 127, "1y": 253}
+    # calendar-day lookbacks per label; "1d" = last close vs previous close
+    period_days = {"1d": None, "5d": 7, "1mo": 30, "3mo": 91, "6mo": 182, "1y": 365}
     tickers = list(SECTOR_ETFS.values())
-    max_bars = max(period_days[p] for p in periods if p in period_days)
-    start = (datetime.now() - timedelta(days=int(max_bars * 1.55) + 10)).strftime("%Y-%m-%d")
+    max_days = max((period_days[p] or 0) for p in periods if p in period_days)
+    start = (datetime.now() - timedelta(days=max_days + 15)).strftime("%Y-%m-%d")
     rows: list[dict] = []
 
     def _fetch_etf(etf: str) -> list[dict]:
@@ -402,11 +419,10 @@ def fetch_sector_performance_robust(periods: list[str] = ["1d", "5d", "1mo"]) ->
         for period, days in period_days.items():
             if period not in periods:
                 continue
-            window = s.tail(days)
-            if len(window) < 2:
+            ret = window_return(s, days)
+            if ret is None:
                 continue
-            ret = (window.iloc[-1] / window.iloc[0] - 1) * 100
-            local_rows.append({"Sector": sector, "ETF": etf, "Period": period, "Return %": round(float(ret), 2)})
+            local_rows.append({"Sector": sector, "ETF": etf, "Period": period, "Return %": ret})
         return local_rows
 
     with ThreadPoolExecutor(max_workers=min(11, len(tickers))) as ex:
