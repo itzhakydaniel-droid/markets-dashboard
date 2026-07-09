@@ -55,6 +55,8 @@ try:
     from src.data.price_fetcher import fetch_intraday_multi
     from src.data.sector_rating import fetch_sector_ratings, interpret_sector_score
     from src.data.sector_rotation import fetch_sector_rotation
+    from src.data.cta_positioning import fetch_cta_positioning
+    from src.components.charts import cot_net_chart
     from src.components.charts import sector_detail_chart, yield_curve_chart, yield_spread_chart
     from src.data.yield_curve import fetch_yield_curve
     from src.data.ai_engine import (
@@ -360,6 +362,10 @@ def load_yield_curve():
 @st.cache_data(ttl=600, show_spinner=False)          # Sector Rotation Engine — RS math on 11 ETFs
 def load_sector_rotation():
     return fetch_sector_rotation()
+
+@st.cache_data(ttl=3600, show_spinner=False)         # real CFTC COT positioning — weekly data
+def load_cta_positioning():
+    return fetch_cta_positioning()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def kpi(label, value, delta=None, delta_positive=None, accent=None):
@@ -1443,9 +1449,54 @@ with tab_vol:
     else:
         st.warning("VIX data unavailable.")
 
-    # ── CTA ───────────────────────────────────────────────────────────────────
+    # ── REAL CTA / FUND POSITIONING — CFTC COT ────────────────────────────────
+    section("🏦 REAL CTA / Fund Positioning — CFTC Commitments of Traders (Official)")
+    try:
+        _cot = load_cta_positioning()
+    except Exception:
+        _cot = {}
+
+    if _cot:
+        _asof = next(iter(_cot.values()))["AsOf"]
+        st.markdown(f"""<div style='font-size:.76rem;color:#a2b6df;margin-bottom:8px'>
+            <b style='color:#5DC7D6'>Leveraged Funds</b> (hedge funds / CTAs / managed futures) on financials •
+            <b style='color:#5DC7D6'>Managed Money</b> on commodities • Regulator-collected, published weekly •
+            Positions as of <b style='color:#fffffe'>{_asof}</b></div>""", unsafe_allow_html=True)
+
+        _mkts = list(_cot.values())
+        _per_row = 4
+        for _s0 in range(0, len(_mkts), _per_row):
+            _ccols = st.columns(_per_row)
+            for _cc, _m in zip(_ccols, _mkts[_s0:_s0 + _per_row]):
+                _net_c = "#10b981" if _m["Net"] >= 0 else "#ef4444"
+                _chg_c = "#10b981" if _m["Change_1w"] >= 0 else "#ef4444"
+                _cc.markdown(f"""<div class='kpi-tile' style='border-top:2px solid {_m["Color"]};padding:12px 10px 9px'>
+                    <div class='kpi-label' style='font-size:.6rem'>{_m["Market"]}</div>
+                    <div class='kpi-value' style='font-size:1.15rem;color:{_net_c}'>{_m["Net"]:+,}</div>
+                    <div style='font-size:.66rem;color:#a2b6df'>net contracts ({_m["Net_pct_OI"]:+.1f}% OI)</div>
+                    <div style='font-size:.66rem;color:{_chg_c};font-weight:700'>Δ1w {_m["Change_1w"]:+,}</div>
+                    <div style='background:#1E2832;border-radius:99px;height:4px;margin:6px 8px 4px'>
+                        <div style='background:{_m["Color"]};height:4px;border-radius:99px;width:{_m["Pctile_3y"]:.0f}%'></div>
+                    </div>
+                    <div style='font-size:.58rem;color:{_m["Color"]};font-weight:800'>{_m["Regime"]} · {_m["Pctile_3y"]:.0f}th pct 3Y</div>
+                </div>""", unsafe_allow_html=True)
+
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        _hist_pick = st.selectbox("Positioning history", list(_cot.keys()), index=0,
+                                  label_visibility="collapsed", key="cot_hist_market")
+        _hm = _cot.get(_hist_pick)
+        if _hm is not None:
+            st.plotly_chart(cot_net_chart(_hm["History"], _hist_pick),
+                            use_container_width=True, config={"displayModeBar": False})
+        st.caption("Source: CFTC Traders-in-Financial-Futures + Disaggregated COT reports "
+                   "(publicreporting.cftc.gov) — actual reported positions, updated every Friday "
+                   "(as-of Tuesday). Percentile is the net position's rank over ~3 years of weekly data.")
+    else:
+        st.warning("CFTC COT API unavailable right now — retry shortly.")
+
+    # ── CTA momentum model (secondary) ────────────────────────────────────────
     if cta_data:
-        section("CTA Trend-Following Exposure Proxy  •  Multi-Horizon Momentum Z-Score")
+        section("CTA Trend-Following Model Estimate  •  Momentum Z-Score (Daily Proxy)")
 
         cta_cols = st.columns(len(cta_data))
         for col, (label, d) in zip(cta_cols, cta_data.items()):

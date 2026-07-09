@@ -1011,3 +1011,23 @@ def yield_spread_chart(spread: pd.Series, label: str = "10Y − 2Y") -> go.Figur
         showlegend=False,
     )
     return fig
+
+
+def cot_net_chart(history: pd.Series, market: str, color: str = MAGENTA) -> go.Figure:
+    """Weekly net positioning history (CFTC COT) — bars colored by sign."""
+    if history is None or history.empty:
+        return go.Figure()
+    colors = [GREEN if v >= 0 else RED for v in history.values]
+    fig = go.Figure(go.Bar(
+        x=history.index, y=history.values,
+        marker=dict(color=colors, opacity=0.85, line=dict(width=0)),
+        hovertemplate="%{x|%d %b %Y}: %{y:+,.0f} contracts<extra></extra>",
+    ))
+    fig.add_hline(y=0, line=dict(color=DIM, width=1))
+    _apply(fig, h=340, title=f"{market} — Net Positioning History (weekly, ~3 years)")
+    fig.update_layout(
+        yaxis=dict(title="Net contracts", showgrid=True, gridcolor=GRID, zeroline=False),
+        xaxis=dict(showgrid=False),
+        showlegend=False, bargap=0.15,
+    )
+    return fig
