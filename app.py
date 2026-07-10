@@ -534,8 +534,10 @@ if not _tape_df.empty:
     _items = []
     for _, _r in _tape_df.iterrows():
         _p, _c = _r.get("Price"), _r.get("Change %")
-        if not isinstance(_p, (int, float)):
+        if not isinstance(_p, (int, float)) or _p != _p:   # skip None and NaN
             continue
+        if isinstance(_c, float) and _c != _c:
+            _c = None
         _sym = _TAPE_LABELS.get(_r["Ticker"], _r["Ticker"])
         if _r["Ticker"] == "^TNX":
             _ps = f"{_p/10:.2f}%"
@@ -721,7 +723,8 @@ def render_live_watchlist():
     if _wl_quotes.empty:
         return
     section("⚡ Live Watchlist")
-    _wl_rows = [r for _, r in _wl_quotes.iterrows() if isinstance(r.get("Price"), (int, float))]
+    _wl_rows = [r for _, r in _wl_quotes.iterrows()
+                if isinstance(r.get("Price"), (int, float)) and r.get("Price") == r.get("Price")]
     _per_row = 6
     for _start in range(0, len(_wl_rows), _per_row):
         _chunk = _wl_rows[_start:_start + _per_row]
@@ -1092,35 +1095,39 @@ with tab_watch:
                 return [base] * len(row)
 
             def _fmt_price(v):
-                return f"${v:,.2f}" if isinstance(v, (int, float)) and v else "—"
+                return f"${v:,.2f}" if isinstance(v, (int, float)) and v == v and v else "—"
 
             def _fmt_chg(v):
-                if not isinstance(v, (int, float)):
+                if not isinstance(v, (int, float)) or v != v:
                     return "—"
                 col = "color:#10b981" if v >= 0 else "color:#ef4444"
                 return f'<span style="{col};font-weight:700">{v:+.2f}%</span>'
+
+            def _num(x):
+                """Return float(x) or None for None/NaN/non-numeric — NaN-safe guard."""
+                return float(x) if isinstance(x, (int, float)) and x == x else None
 
             # Render as HTML table for full color control
             rows_html = []
             for _, row in display.iterrows():
                 ticker = row["Ticker"]
                 price  = _fmt_price(row.get("Price"))
-                chg    = row.get("Change", 0)
-                chgp   = row.get("Change %", 0)
-                chgp_s = f"{chgp:+.2f}%" if isinstance(chgp,(int,float)) else "—"
-                chg_s  = f"{chg:+.2f}" if isinstance(chg,(int,float)) else "—"
-                chg_c  = "#10b981" if isinstance(chgp,(int,float)) and chgp>=0 else "#ef4444"
+                chg    = _num(row.get("Change"))
+                chgp   = _num(row.get("Change %"))
+                chgp_s = f"{chgp:+.2f}%" if chgp is not None else "—"
+                chg_s  = f"{chg:+.2f}" if chg is not None else "—"
+                chg_c  = "#10b981" if (chgp or 0) >= 0 else "#ef4444"
                 rs_s   = ""
                 if rs_col and rs_col[0] in row:
-                    rv = row[rs_col[0]]
-                    rs_c = "#10b981" if isinstance(rv,(int,float)) and rv>=0 else "#ef4444"
-                    rs_s = f'<td style="color:{rs_c};font-weight:600;padding:8px 10px">{rv:+.2f}</td>' if isinstance(rv,(int,float)) else '<td style="color:#6b7280;padding:8px 10px">—</td>'
+                    rv = _num(row[rs_col[0]])
+                    rs_c = "#10b981" if (rv or 0) >= 0 else "#ef4444"
+                    rs_s = f'<td style="color:{rs_c};font-weight:600;padding:8px 10px">{rv:+.2f}</td>' if rv is not None else '<td style="color:#6b7280;padding:8px 10px">—</td>'
                 vol_s = ""
                 if "Volume" in row:
-                    v = row.get("Volume", 0)
-                    vol_s = f'<td style="color:#9ca3af;padding:8px 10px">{int(v):,}</td>' if isinstance(v,(int,float)) and v else '<td style="color:#4b5563;padding:8px 10px">—</td>'
+                    v = _num(row.get("Volume"))
+                    vol_s = f'<td style="color:#9ca3af;padding:8px 10px">{int(v):,}</td>' if v else '<td style="color:#4b5563;padding:8px 10px">—</td>'
 
-                row_bg = "rgba(16,185,129,0.04)" if isinstance(chgp,(int,float)) and chgp>=0 else "rgba(239,68,68,0.04)"
+                row_bg = "rgba(16,185,129,0.04)" if (chgp or 0) >= 0 else "rgba(239,68,68,0.04)"
                 rows_html.append(f"""<tr style='background:{row_bg};border-bottom:1px solid #1e2533'>
                     <td style='padding:8px 10px;font-weight:700;color:#f1f5f9'>{ticker}</td>
                     <td style='padding:8px 10px;color:#f1f5f9;font-weight:600'>{price}</td>
@@ -1630,8 +1637,8 @@ with tab_review:
                     st.warning("Price data unavailable.")
             with fund_col:
                 section("Key Metrics")
-                def _fmt_px(v):  return f"${v:,.2f}" if isinstance(v,(int,float)) else "—"
-                def _fmt_pct(v): return f"{v:+.1f}%" if isinstance(v,(int,float)) else "—"
+                def _fmt_px(v):  return f"${v:,.2f}" if isinstance(v,(int,float)) and v == v else "—"
+                def _fmt_pct(v): return f"{v:+.1f}%" if isinstance(v,(int,float)) and v == v else "—"
                 _sma50, _sma200 = fund.get("sma50"), fund.get("sma200")
                 _px = fund.get("price")
                 _trend = "—"
