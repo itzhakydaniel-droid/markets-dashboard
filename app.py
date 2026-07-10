@@ -69,6 +69,9 @@ try:
         fetch_tier_radar, fetch_macro_matrix, fetch_raven_dashboard, compute_hedge_params,
         compute_rsi,
     )
+    from src.data.tactical_agent import (
+        build_live_context, ask_tactical_agent, is_agent_available, AGENT_SYSTEM_PROMPT,
+    )
 except Exception as _import_err:
     import traceback as _tb
     st.error(f"**Startup import error** — please report this:\n\n```\n{_tb.format_exc()}\n```")
@@ -952,6 +955,7 @@ with st.expander("📤 Share Charts — Interactive HTML Export", expanded=False
 tabs = st.tabs([
     "🌡️  Macro Score",
     "🦅  Black Raven",
+    "🤖  Tactical Agent",
     "📈  Watchlist & RS",
     "🗺️  Heatmaps",
     "🫁  Market Breadth",
@@ -959,7 +963,7 @@ tabs = st.tabs([
     "🔔  Price Alerts",
     "🔍  Stock Review",
 ])
-(tab_macro, tab_raven, tab_watch, tab_heat_stocks,
+(tab_macro, tab_raven, tab_agent, tab_watch, tab_heat_stocks,
  tab_breadth, tab_vol, tab_alert, tab_review) = tabs
 
 
@@ -2608,6 +2612,86 @@ with tab_raven:
                     — Never buy narrative. Only buy proven CapEx flow.
                 </div>
             </div>""", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB — TACTICAL AI AGENT (interactive command center)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_agent:
+    st.markdown("""
+    <div style='background:linear-gradient(135deg,#101828,#0d141c);border:1px solid #1E2832;
+                border-left:3px solid #f00069;border-radius:14px;padding:16px 22px;margin-bottom:8px'>
+        <span style='font-size:1.15rem;font-weight:900;color:#fffffe'>🤖 TACTICAL AI AGENT</span>
+        <span style='color:#a2b6df;font-size:.78rem;margin-left:10px'>
+            Black Raven command center — live data querying · scenario building · strict protocol adherence
+        </span>
+    </div>""", unsafe_allow_html=True)
+
+    if not is_agent_available():
+        st.markdown("""<div class='card-sm' style='font-size:.84rem;color:#a2b6df;line-height:1.9'>
+            <b style='color:#f00069'>Agent offline — API key required.</b><br>
+            Add <code>ANTHROPIC_API_KEY = "sk-ant-..."</code> to <code>.env</code> (local) or
+            Streamlit Cloud → Settings → Secrets, then refresh. Get a key at
+            <a href='https://platform.claude.com' target='_blank' style='color:#5DC7D6'>platform.claude.com</a>.
+        </div>""", unsafe_allow_html=True)
+    else:
+        if "agent_chat" not in st.session_state:
+            st.session_state.agent_chat = []
+
+        # Quick-strike prompts
+        _qs = st.columns(3)
+        _quick = None
+        with _qs[0]:
+            if st.button("🎯 Kill-zone status — Tier 1/2 vs entries", use_container_width=True, key="qa1"):
+                _quick = "Which Tier 1 and Tier 2 stocks are at or within 3% of their entry zones right now? Table with exact GTC limit levels."
+        with _qs[1]:
+            if st.button("⚡ Liquidity Ambush plan: QQQ −2% day", use_container_width=True, key="qa2"):
+                _quick = "Generate a Liquidity Ambush plan if QQQ drops 2% today. Cold if-then execution framework with GTC buy limits from live data."
+        with _qs[2]:
+            if st.button("📡 Full tactical brief", use_container_width=True, key="qa3"):
+                _quick = "Full tactical brief: yields, VIX, COT positioning extremes, sector rotation leaders/laggards, top 3 protocol opportunities. Cite live numbers."
+
+        # Replay history
+        for _m in st.session_state.agent_chat:
+            with st.chat_message(_m["role"], avatar="🦅" if _m["role"] == "assistant" else "👤"):
+                st.markdown(_m["content"])
+
+        _user_q = st.chat_input("Ask the agent — live data, scenarios, execution frameworks…")
+        if _quick and not _user_q:
+            _user_q = _quick
+
+        if _user_q:
+            with st.chat_message("user", avatar="👤"):
+                st.markdown(_user_q)
+            with st.chat_message("assistant", avatar="🦅"):
+                with st.spinner("Agent computing — injecting live dashboard state…"):
+                    try:
+                        # Step 2: dynamic context injection — the agent sees the live
+                        # sector matrix, 51-stock raven sweep, macro & COT feeds
+                        _ctx = build_live_context(
+                            raven_df=load_raven_dashboard(),
+                            rotation_df=load_sector_rotation(),
+                            macro_matrix={k: v for k, v in (load_macro_matrix() or {}).items()
+                                          if not k.startswith("_")},
+                            yield_curve=load_yield_curve(),
+                            vix_value=float(_hdr_vix["VIX"].iloc[-1]) if not _hdr_vix.empty else None,
+                            cot=load_cta_positioning(),
+                        )
+                        _answer = ask_tactical_agent(_user_q, st.session_state.agent_chat, _ctx)
+                    except Exception as _agent_err:
+                        _answer = f"⚠️ Agent error: {_agent_err}"
+                st.markdown(_answer)
+            st.session_state.agent_chat.append({"role": "user", "content": _user_q})
+            st.session_state.agent_chat.append({"role": "assistant", "content": _answer})
+
+        if st.session_state.agent_chat:
+            if st.button("🗑 Clear session", key="agent_clear"):
+                st.session_state.agent_chat = []
+                st.rerun()
+
+        st.caption("Context injected per turn: 51-stock BLACK RAVEN sweep · Sector Rotation scorecard · "
+                   "macro matrix · Treasury curve · VIX · CFTC COT positioning. "
+                   "Protocol analytics — not financial advice.")
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
