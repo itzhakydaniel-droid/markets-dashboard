@@ -58,7 +58,6 @@ try:
     from src.data.sector_rotation import fetch_sector_rotation
     from src.data.cta_positioning import fetch_cta_positioning
     from src.components.charts import cot_net_chart, stock_deep_chart
-    from src.utils.plotly_publish import is_configured as plotly_configured, publish_figure
     from src.components.charts import sector_detail_chart, yield_curve_chart, yield_spread_chart
     from src.data.yield_curve import fetch_yield_curve
     from src.data.ai_engine import (
@@ -913,48 +912,39 @@ else:
 # ══════════════════════════════════════════════════════════════════════════════
 # PLOTLY CHART STUDIO — publish charts to the user's Plotly account
 # ══════════════════════════════════════════════════════════════════════════════
-with st.expander("📤 Publish Charts to Your Plotly Account", expanded=False):
-    if not plotly_configured():
-        st.markdown("""<div class='card-sm' style='font-size:.84rem;color:#a2b6df;line-height:1.9'>
-            <b style='color:#5DC7D6'>Connect your Plotly account</b> to publish any dashboard chart
-            as a permanent shareable / embeddable URL on your profile.<br>
-            1. Get your API key at
-               <a href='https://chart-studio.plotly.com/settings/api' target='_blank'
-                  style='color:#f00069'>chart-studio.plotly.com/settings/api</a><br>
-            2. Add to <code>.env</code> (local) or Streamlit Cloud → Settings → Secrets:<br>
-            <code>PLOTLY_USERNAME = "your_username"</code><br>
-            <code>PLOTLY_API_KEY = "your_api_key"</code><br>
-            3. Refresh — the publish buttons appear here.
-        </div>""", unsafe_allow_html=True)
-    else:
-        _pub_choices = {
-            "Live Market Chart — Indices vs Open": "pub_live",
-            "US Treasury Yield Curve":             "pub_yc",
-            "Yield Spread 10Y−2Y (3Y history)":    "pub_spread",
-        }
-        _pub_pick = st.selectbox("Chart to publish", list(_pub_choices.keys()),
-                                 label_visibility="collapsed", key="plotly_pub_pick")
-        if st.button("📤 Publish to Plotly", key="plotly_pub_btn"):
-            try:
-                with st.spinner("Publishing to your Plotly account…"):
-                    if _pub_choices[_pub_pick] == "pub_live":
-                        _series = {t: s for t, s in _intraday.items() if t in ("SPY", "QQQ", "IWM")}
-                        _fig = intraday_live_chart(_series,
-                            {"SPY": "S&P 500", "QQQ": "Nasdaq 100", "IWM": "Russell 2000"})
-                        _url = publish_figure(_fig, "markets-live-indices")
-                    elif _pub_choices[_pub_pick] == "pub_yc":
-                        _yc_pub = load_yield_curve()
-                        _fig = yield_curve_chart(_yc_pub)
-                        _url = publish_figure(_fig, "us-treasury-yield-curve")
-                    else:
-                        _yc_pub = load_yield_curve()
-                        _fig = yield_spread_chart(_yc_pub.get("spread_2s10s"), "10Y − 2Y")
-                        _url = publish_figure(_fig, "yield-spread-2s10s")
-                st.success(f"Published! Shareable URL: {_url}")
-                st.markdown(f"<a href='{_url}' target='_blank' style='color:#f00069;font-weight:700'>Open chart on Plotly ↗</a>",
-                            unsafe_allow_html=True)
-            except Exception as _pub_err:
-                st.error(f"Publish failed: {_pub_err}")
+with st.expander("📤 Share Charts — Interactive HTML Export", expanded=False):
+    st.markdown("""<div class='card-sm' style='font-size:.8rem;color:#a2b6df;line-height:1.8'>
+        Export any dashboard chart as a <b style='color:#5DC7D6'>standalone interactive HTML file</b> —
+        full hover/zoom/pan, opens in any browser, no account needed. Send it to anyone or embed it in
+        a site. <span style='color:#475467'>(Plotly discontinued Chart Studio uploads; your Plotly Cloud
+        account hosts Dash apps instead — this export gives the same one-chart shareability.)</span>
+    </div>""", unsafe_allow_html=True)
+
+    def _build_export_fig(kind: str):
+        if kind == "live":
+            _series = {t: s for t, s in _intraday.items() if t in ("SPY", "QQQ", "IWM")}
+            return intraday_live_chart(_series,
+                {"SPY": "S&P 500", "QQQ": "Nasdaq 100", "IWM": "Russell 2000"})
+        if kind == "yc":
+            return yield_curve_chart(load_yield_curve())
+        return yield_spread_chart(load_yield_curve().get("spread_2s10s"), "10Y − 2Y")
+
+    _exp_choices = {
+        "Live Market Chart — Indices vs Open": ("live",   "markets-live-indices.html"),
+        "US Treasury Yield Curve":             ("yc",     "us-treasury-yield-curve.html"),
+        "Yield Spread 10Y−2Y (3Y history)":    ("spread", "yield-spread-2s10s.html"),
+    }
+    _exp_pick = st.selectbox("Chart to export", list(_exp_choices.keys()),
+                             label_visibility="collapsed", key="plotly_exp_pick")
+    _kind, _fname = _exp_choices[_exp_pick]
+    try:
+        _html = _build_export_fig(_kind).to_html(include_plotlyjs="cdn", full_html=True)
+        st.download_button(
+            "⬇ Download Interactive Chart (HTML)", data=_html,
+            file_name=_fname, mime="text/html", key="plotly_exp_dl",
+        )
+    except Exception as _exp_err:
+        st.error(f"Export failed: {_exp_err}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TABS
