@@ -11,3 +11,4 @@ beautifulsoup4
 lxml
 curl_cffi
 # force rebuild 2026-07-08
+chart-studio
