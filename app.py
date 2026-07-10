@@ -1829,7 +1829,7 @@ with tab_raven:
                     else:
                         _flow_cells += "<td style='padding:7px 8px;color:#475467'>—</td>"
                 _st_c = "#10b981" if "ACCUMULATION" in _r["Slope_State"] else "#ef4444" if "DISTRIBUTION" in _r["Slope_State"] or "NEGATIVE" in _r["Slope_State"] else "#f59e0b"
-                _q_struct = ("✓ RS>QMA" if _r["Above_QMA"] else "✗ RS<QMA") + " · " + ("✓ QMA>YMA" if _r["QMA_gt_YMA"] else "✗ QMA<YMA")
+                _q_struct = ("✓ RS&gt;QMA" if _r["Above_QMA"] else "✗ RS&lt;QMA") + " · " + ("✓ QMA&gt;YMA" if _r["QMA_gt_YMA"] else "✗ QMA&lt;YMA")
                 _ov = _r["Overlay"]
                 _ov_c = "#10b981" if _ov > 0 else "#ef4444" if _ov < 0 else "#475467"
                 _rows.append(f"""<tr style='border-bottom:1px solid #1E2832'>
