@@ -48,6 +48,8 @@ MASTER_WATCHLIST: dict[str, dict] = {
     "ALAB":      {"tier": 2, "name": "Astera Labs",         "sector": "PCIe / Connectivity",      "entry": "special","entry_note": "Structural support zones"},
     "NVTS":      {"tier": 2, "name": "Navitas Semi",        "sector": "GaN Power Efficiency",     "entry": "special","entry_note": "Aggressive red days"},
     "ALGM":      {"tier": 2, "name": "Allegro Micro",       "sector": "Power ICs / Physical AI",  "entry": "sma200", "entry_note": "200-Day SMA"},
+    "AIP":       {"tier": 2, "name": "Arteris",             "sector": "Custom Silicon & IP / NoC","entry": "sma50",  "entry_note": "50-Day SMA + Volume Confirmation",
+                  "raven_override": ("MICRO-CAP LIQUIDITY WATCH — monitor volume spikes & VaR expansion", "#f59e0b")},
     # ── TIER 3: Medium Conviction — policy beta, integration, hedges ──────────
     "POWL":      {"tier": 3, "name": "Powell Industries",   "sector": "Electrical Enclosures",    "entry": "sma50",  "entry_note": "50-Day SMA"},
     "NVT":       {"tier": 3, "name": "nVent Electric",      "sector": "Liquid Cooling Enclosures","entry": "sma100", "entry_note": "100-Day SMA"},
@@ -567,7 +569,10 @@ def fetch_raven_dashboard() -> pd.DataFrame:
                 "entry_px": entry_px, "entry_note": meta["entry_note"],
             }
 
-            if meta["tier"] == 4:
+            if "raven_override" in meta:
+                # permanent risk-profile tag mandated by the protocol (e.g. AIP)
+                alert, color = meta["raven_override"]
+            elif meta["tier"] == 4:
                 alert, color = (f"DANGER ZONE — {meta['entry_note'].upper()}", "#ef4444")
             else:
                 alert, color = _raven_alert(d, vix_up)
