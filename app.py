@@ -56,7 +56,7 @@ try:
     from src.data.sector_rating import fetch_sector_ratings, interpret_sector_score
     from src.data.sector_rotation import fetch_sector_rotation
     from src.data.cta_positioning import fetch_cta_positioning
-    from src.components.charts import cot_net_chart
+    from src.components.charts import cot_net_chart, stock_deep_chart
     from src.components.charts import sector_detail_chart, yield_curve_chart, yield_spread_chart
     from src.data.yield_curve import fetch_yield_curve
     from src.data.ai_engine import (
@@ -366,6 +366,16 @@ def load_sector_rotation():
 @st.cache_data(ttl=3600, show_spinner=False)         # real CFTC COT positioning — weekly data
 def load_cta_positioning():
     return fetch_cta_positioning()
+
+@st.cache_data(ttl=600, show_spinner=False)          # deep-dive series for drill-down panels
+def load_deep_series(ticker: str):
+    from src.data.price_fetcher import fetch_history_robust
+    from datetime import timedelta
+    start = (datetime.now() - timedelta(days=560)).strftime("%Y-%m-%d")
+    s   = fetch_history_robust(ticker, start)
+    spy = fetch_history_robust("SPY", start)
+    return (s.sort_index() if s is not None and not s.empty else None,
+            spy.sort_index() if spy is not None and not spy.empty else None)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def kpi(label, value, delta=None, delta_positive=None, accent=None):
@@ -717,6 +727,61 @@ with st.expander("📡 Live Market Chart — Indices vs Open", expanded=True):
         )
     else:
         st.info("Live chart data unavailable right now.")
+
+def render_deep_dive(ticker: str, entry_px: float | None = None, entry_note: str = ""):
+    """Drill-down analysis panel: MA-stack chart + RS panel + metrics matrix."""
+    from src.data.black_raven import compute_rsi
+    from src.data.price_fetcher import window_return
+
+    with st.spinner(f"Deep analysis — {ticker}…"):
+        s, spy = load_deep_series(ticker)
+    if s is None or len(s) < 30:
+        st.warning(f"No price history available for {ticker}.")
+        return
+
+    px = float(s.iloc[-1])
+    chart_col, mx_col = st.columns([3, 1])
+    with chart_col:
+        st.plotly_chart(
+            stock_deep_chart(s, spy, ticker, entry_px=entry_px, entry_note=entry_note),
+            use_container_width=True, config={"displayModeBar": False},
+        )
+    with mx_col:
+        section("Analysis Matrix")
+        rsi = compute_rsi(s.tail(60))
+        daily = s.pct_change().dropna()
+        vol   = float(daily.std() * (252 ** 0.5)) * 100 if len(daily) > 20 else None
+        dd    = float((s / s.cummax() - 1).min()) * 100
+
+        rows_m: list[tuple[str, str, str]] = []
+        for lbl, days in [("1W", 7), ("1M", 30), ("3M", 91), ("6M", 182), ("1Y", 365)]:
+            r  = window_return(s, days)
+            rs = window_return(spy, days) if spy is not None else None
+            rel = (r - rs) if (r is not None and rs is not None) else None
+            r_s   = f"{r:+.1f}%" if r is not None else "—"
+            rel_s = f"{rel:+.1f}pp" if rel is not None else "—"
+            rows_m.append((f"{lbl} Return", r_s, "#10b981" if (r or 0) >= 0 else "#ef4444"))
+            rows_m.append((f"{lbl} vs SPY", rel_s, "#10b981" if (rel or 0) >= 0 else "#ef4444"))
+        for n in (20, 50, 100, 200):
+            if len(s) >= n:
+                ma = float(s.tail(n).mean())
+                dist = (px / ma - 1) * 100
+                rows_m.append((f"vs SMA {n}", f"{dist:+.1f}%", "#10b981" if dist >= 0 else "#ef4444"))
+        if rsi == rsi:
+            rows_m.append(("RSI 14", f"{rsi:.0f}", "#ef4444" if rsi > 70 else "#0CABC2" if rsi < 30 else "#a2b6df"))
+        if vol is not None:
+            rows_m.append(("Ann. Vol", f"{vol:.0f}%", "#a2b6df"))
+        rows_m.append(("Max DD", f"{dd:.0f}%", "#ef4444"))
+
+        _mx_html = "".join(
+            f"<div style='display:flex;justify-content:space-between;padding:5px 0;"
+            f"border-bottom:1px solid #1E2832;font-size:.78rem'>"
+            f"<span style='color:#a2b6df'>{l}</span>"
+            f"<span style='color:{c};font-weight:700'>{v}</span></div>"
+            for l, v, c in rows_m
+        )
+        st.markdown(f"<div class='card-sm'>{_mx_html}</div>", unsafe_allow_html=True)
+
 
 def render_live_watchlist():
     """Live watchlist grid — real-time quotes + sparklines (shown in Watchlist & RS tab)."""
@@ -1169,15 +1234,26 @@ with tab_watch:
                 use_container_width=True, height=min(420, 38 * (len(_rs_view) + 1)),
             )
 
-        # ── Quick jump buttons ────────────────────────────────────────────────
+        # ── Quick deep-dive buttons — click any ticker for full analysis ─────
         st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-        section("Quick Review Jump")
+        section("🔬 Click Any Ticker — Deep Analysis Chart & Matrix")
         pill_cols = st.columns(min(len(st.session_state.watchlist), 12))
         for i, t in enumerate(st.session_state.watchlist):
             with pill_cols[i % len(pill_cols)]:
                 if st.button(t, key=f"wl_{t}", use_container_width=True):
                     st.session_state.selected_ticker = t
-                    st.toast(f"Selected {t} — open Stock Review tab", icon="📈")
+                    st.session_state.wl_deep_ticker = None if st.session_state.get("wl_deep_ticker") == t else t
+
+        _deep_t = st.session_state.get("wl_deep_ticker")
+        if _deep_t:
+            _dd_meta = MASTER_WATCHLIST.get(_deep_t, {})
+            st.markdown(f"""<div class='card' style='border-left:4px solid #f00069;margin-top:10px;padding:14px 20px'>
+                <span style='font-size:1.15rem;font-weight:800;color:#fffffe'>🔬 {_deep_t}</span>
+                <span style='color:#a2b6df;font-size:.82rem;margin-left:10px'>{_dd_meta.get("name","")}
+                {("· " + _dd_meta["sector"]) if _dd_meta.get("sector") else ""}
+                {("· Tier " + str(_dd_meta["tier"])) if _dd_meta.get("tier") else ""}</span>
+            </div>""", unsafe_allow_html=True)
+            render_deep_dive(_deep_t)
 
         if st.session_state.alerts:
             triggered = check_alerts(st.session_state.alerts, merged)
@@ -1898,6 +1974,31 @@ with tab_raven:
 
             st.caption("BLACK RAVEN alert engine: VaR breach → CTA de-grossing → illiquidity trap → Spot Up/Vol Up → "
                        "structure breaks → limit-order triggers → kill zones. Limit orders only at algorithmic support zones — never chase thin books.")
+
+            # ── Deep analysis drill-down ─────────────────────────────────────
+            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+            section("🔬 Deep Analysis — Pick Any Watchlist Stock")
+            _rv_pick = st.selectbox(
+                "Deep analysis ticker",
+                raven_df["Ticker"].tolist(),
+                format_func=lambda t: f"{t} — {MASTER_WATCHLIST.get(t,{}).get('name',t)} (T{MASTER_WATCHLIST.get(t,{}).get('tier','?')})",
+                label_visibility="collapsed", key="raven_deep_pick",
+            )
+            if _rv_pick:
+                _rv_row = raven_df[raven_df["Ticker"] == _rv_pick].iloc[0]
+                _rv_alert_c = _rv_row["RavenColor"]
+                st.markdown(f"""<div class='card' style='border-left:4px solid {_rv_alert_c};padding:12px 20px'>
+                    <span style='font-size:1.05rem;font-weight:800;color:#fffffe'>{_rv_pick}</span>
+                    <span style='color:#a2b6df;font-size:.8rem;margin-left:8px'>{_rv_row["Company"]} · {_rv_row["Sector"]}</span>
+                    <span style='background:{_rv_alert_c}18;color:{_rv_alert_c};font-size:.7rem;font-weight:800;
+                          padding:3px 10px;border-radius:99px;margin-left:10px'>{_rv_row["RAVEN"]}</span>
+                </div>""", unsafe_allow_html=True)
+                _rv_entry = _rv_row["Entry_Price"]
+                render_deep_dive(
+                    _rv_pick,
+                    entry_px=float(_rv_entry) if isinstance(_rv_entry, (int, float)) and _rv_entry == _rv_entry else None,
+                    entry_note=str(_rv_row["Entry_Rule"]),
+                )
 
     # ════════════════════════════════════════════════════════════════════════
     # MODULE 1 — MACRO & LIQUIDITY MATRIX

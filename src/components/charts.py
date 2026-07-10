@@ -1031,3 +1031,67 @@ def cot_net_chart(history: pd.Series, market: str, color: str = MAGENTA) -> go.F
         showlegend=False, bargap=0.15,
     )
     return fig
+
+
+def stock_deep_chart(s: pd.Series, spy: pd.Series | None, ticker: str,
+                     smas: dict | None = None, entry_px: float | None = None,
+                     entry_note: str = "") -> go.Figure:
+    """
+    Deep-analysis chart: price with SMA 20/50/100/200 stack + optional
+    entry level (top panel), cumulative RS vs SPY (bottom panel).
+    """
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3],
+        vertical_spacing=0.05,
+        subplot_titles=(f"{ticker} — Price & Moving-Average Stack",
+                        "Relative Performance vs S&P 500 (%)"),
+    )
+    fig.add_trace(go.Scatter(
+        x=s.index, y=s.values, name="Price",
+        line=dict(color=TEAL, width=2.3),
+        hovertemplate="%{y:.2f}<extra>Price</extra>",
+    ), row=1, col=1)
+
+    sma_cfg = [(20, YELLOW, "dot"), (50, BLUE, None), (100, PURPLE, "dash"), (200, MAGENTA, None)]
+    for n, color, dash in sma_cfg:
+        if len(s) >= n:
+            ma = s.rolling(n).mean()
+            line = dict(color=color, width=1.3)
+            if dash:
+                line["dash"] = dash
+            fig.add_trace(go.Scatter(
+                x=ma.index, y=ma.values, name=f"SMA {n}",
+                line=line, hovertemplate="%{y:.2f}<extra>SMA " + str(n) + "</extra>",
+            ), row=1, col=1)
+
+    if entry_px:
+        fig.add_hline(y=entry_px, row=1, col=1,
+                      line=dict(color=GREEN, width=1.6, dash="dashdot"),
+                      annotation_text=f"ENTRY {entry_note} ${entry_px:,.2f}",
+                      annotation_position="bottom left",
+                      annotation_font=dict(color=GREEN, size=10))
+
+    if spy is not None and not spy.empty:
+        joined = pd.concat([s, spy], axis=1, keys=["t", "spy"]).dropna()
+        if len(joined) > 5:
+            rel = ((joined["t"] / joined["t"].iloc[0]) / (joined["spy"] / joined["spy"].iloc[0]) - 1) * 100
+            fig.add_trace(go.Scatter(
+                x=rel.index, y=rel.values, name="RS vs SPY",
+                line=dict(color=CYAN, width=1.8),
+                fill="tozeroy", fillcolor="rgba(12,171,194,.10)",
+                hovertemplate="%{y:+.1f}%<extra>vs SPY</extra>",
+            ), row=2, col=1)
+            fig.add_hline(y=0, row=2, col=1, line=dict(color=DIM, width=1, dash="dot"))
+
+    _layout = dict(BASE_LAYOUT)
+    _layout.update(
+        height=520,
+        legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="right", x=1.0,
+                    font=dict(size=10, color=TEXT), bgcolor="rgba(0,0,0,0)"),
+        hovermode="x unified",
+    )
+    fig.update_layout(**_layout)
+    fig.update_annotations(font=dict(color=MUTED, size=12))
+    fig.update_yaxes(gridcolor=GRID, zeroline=False)
+    fig.update_xaxes(gridcolor=GRID, showgrid=False)
+    return fig
