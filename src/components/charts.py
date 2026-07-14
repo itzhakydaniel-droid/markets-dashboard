@@ -1095,3 +1095,89 @@ def stock_deep_chart(s: pd.Series, spy: pd.Series | None, ticker: str,
     fig.update_yaxes(gridcolor=GRID, zeroline=False)
     fig.update_xaxes(gridcolor=GRID, showgrid=False)
     return fig
+
+
+def rotation_scores_chart(df: pd.DataFrame) -> go.Figure:
+    """Sector Rotation — horizontal final-score bars, tier-colored."""
+    if df is None or df.empty:
+        return go.Figure()
+    d = df.sort_values("Final_Score")
+    fig = go.Figure(go.Bar(
+        x=d["Final_Score"], y=d["Sector"], orientation="h",
+        marker=dict(color=list(d["TierColor"]), opacity=0.9, line=dict(width=0)),
+        text=[f"  {v:.1f}" for v in d["Final_Score"]],
+        textposition="outside", textfont=dict(color=TEXT, size=12),
+        hovertemplate="<b>%{y}</b>: %{x:.1f}/12<extra></extra>",
+    ))
+    for x, lbl, c in [(9, "TIER 1", GREEN), (7, "TIER 2", TEAL), (4, "NEUTRAL", YELLOW), (2, "DIST.", "#f97316")]:
+        fig.add_vline(x=x, line=dict(color=c, width=1, dash="dot"), opacity=0.55,
+                      annotation_text=lbl, annotation_position="top",
+                      annotation_font=dict(color=c, size=9))
+    _apply(fig, h=380, title="Rotation Conviction Ranking  •  Final Score /12")
+    fig.update_layout(
+        xaxis=dict(range=[0, 13], showgrid=True, gridcolor=GRID),
+        yaxis=dict(showgrid=False, tickfont=dict(color=TEXT, size=11)),
+        showlegend=False, margin=dict(l=14, r=30, t=48, b=14),
+    )
+    return fig
+
+
+def rs_flow_heatmap(df: pd.DataFrame) -> go.Figure:
+    """Sector Rotation — RS Flow matrix heatmap (sectors × horizons, % RS change)."""
+    if df is None or df.empty:
+        return go.Figure()
+    horizons = ["RS_1W", "RS_1M", "RS_3M", "RS_6M", "RS_1Y"]
+    labels   = ["1W", "1M", "3M", "6M", "1Y"]
+    d = df.sort_values("Final_Score", ascending=False)
+    z = d[horizons].values.astype(float)
+    zmax = max(1.0, float(np.nanmax(np.abs(z))))
+    fig = go.Figure(go.Heatmap(
+        z=z, x=labels, y=list(d["Sector"]),
+        colorscale=[[0, RED], [0.5, "#101828"], [1, GREEN]],
+        zmid=0, zmin=-zmax, zmax=zmax,
+        text=[[f"{v:+.1f}" if v == v else "—" for v in row] for row in z],
+        texttemplate="%{text}", textfont=dict(size=11, color=TEXT),
+        colorbar=dict(title=dict(text="RS Δ%", font=dict(color=MUTED, size=10)),
+                      tickfont=dict(color=MUTED, size=10), thickness=10),
+        hovertemplate="<b>%{y}</b> %{x}: %{z:+.2f}%<extra></extra>",
+    ))
+    _apply(fig, h=380, title="RS Flow Matrix  •  Capital Rotation vs SPY by Horizon")
+    fig.update_layout(
+        xaxis=dict(side="top", showgrid=False, tickfont=dict(color=TEXT, size=12)),
+        yaxis=dict(showgrid=False, autorange="reversed", tickfont=dict(color=TEXT, size=11)),
+        margin=dict(l=14, r=14, t=72, b=10),
+    )
+    return fig
+
+
+def ratings_scores_chart(ratings: dict) -> go.Figure:
+    """Sector Ratings — 10-point score bars with component stacking."""
+    if not ratings:
+        return go.Figure()
+    items = sorted(ratings.items(), key=lambda kv: kv[1]["total"], reverse=True)
+    names = [k for k, _ in items]
+    comp_cfg = [
+        ("score_3m",  "3M Trend (+2)",   BLUE),
+        ("score_6m",  "6M Trend (+2)",   INDIGO),
+        ("score_yoy", "YoY Trend (+3)",  PURPLE),
+        ("score_abs", ">200DMA (+3)",    YELLOW),
+    ]
+    fig = go.Figure()
+    for key, label, color in comp_cfg:
+        fig.add_trace(go.Bar(
+            name=label, x=names, y=[d[key] for _, d in items],
+            marker=dict(color=color, opacity=0.9, line=dict(width=0)),
+            hovertemplate=f"<b>%{{x}}</b><br>{label}: %{{y}} pts<extra></extra>",
+        ))
+    for i, (name, d) in enumerate(items):
+        fig.add_annotation(x=name, y=d["total"] + 0.45, text=f"<b>{d['total']}</b>",
+                           showarrow=False, font=dict(color=d["verdict"]["color"], size=13))
+    _apply(fig, h=360, title="Sector Scores  •  10-Point Method Breakdown")
+    fig.update_layout(
+        barmode="stack", yaxis=dict(range=[0, 11.5], showgrid=True, gridcolor=GRID),
+        xaxis=dict(showgrid=False, tickangle=-28, tickfont=dict(color=TEXT, size=11)),
+        legend=dict(orientation="h", y=-0.32, x=0.5, xanchor="center",
+                    bgcolor="rgba(0,0,0,0)", font=dict(color=MUTED, size=10)),
+        margin=dict(l=14, r=14, t=48, b=14),
+    )
+    return fig
