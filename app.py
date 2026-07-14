@@ -728,6 +728,7 @@ with st.expander("📡 Live Market Chart — Indices vs Open", expanded=True):
                 {"SPY": "S&P 500", "QQQ": "Nasdaq 100", "IWM": "Russell 2000"},
                 title=f"Live — {_live_range} • % Change"),
             use_container_width=True, config={"displayModeBar": False},
+            key="pc_live_market",
         )
     else:
         st.info("Live chart data unavailable right now.")
@@ -749,6 +750,7 @@ def render_deep_dive(ticker: str, entry_px: float | None = None, entry_note: str
         st.plotly_chart(
             stock_deep_chart(s, spy, ticker, entry_px=entry_px, entry_note=entry_note),
             use_container_width=True, config={"displayModeBar": False},
+            key=f"pc_deep_{ticker}",
         )
     with mx_col:
         section("Analysis Matrix")
@@ -907,6 +909,7 @@ if _ratings:
         st.plotly_chart(
             sector_detail_chart(_d["series"], _d.get("spy"), _sel),
             use_container_width=True, config={"displayModeBar": False},
+            key="pc_sector_detail",
         )
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 else:
@@ -989,7 +992,7 @@ with tab_macro:
 
                 col_g, col_r = st.columns([1, 1])
                 with col_g:
-                    st.plotly_chart(macro_gauge(total), use_container_width=True)
+                    st.plotly_chart(macro_gauge(total), use_container_width=True, key="pc_992")
 
                 with col_r:
                     pct = total / 70
@@ -1055,7 +1058,7 @@ with tab_macro:
                         </div>""", unsafe_allow_html=True)
 
                 section("Score Breakdown by Indicator")
-                st.plotly_chart(score_breakdown_bar([s.breakdown() for s in scores]), use_container_width=True)
+                st.plotly_chart(score_breakdown_bar([s.breakdown() for s in scores]), use_container_width=True, key="pc_1058")
 
                 section("Historical Trend (24 Months)")
                 spark_cols = st.columns(4)
@@ -1064,7 +1067,7 @@ with tab_macro:
                     with spark_cols[i % 4]:
                         st.plotly_chart(macro_indicator_sparkline(
                             macro_data.get(key, pd.Series(dtype=float)), sc.name
-                        ), use_container_width=True)
+                        ), use_container_width=True, key=f"macro_spark_{key}")
 
             except Exception as e:
                 st.error(f"Macro data error: {e}")
@@ -1115,11 +1118,11 @@ with tab_macro:
         _yc1, _yc2 = st.columns(2)
         with _yc1:
             st.plotly_chart(yield_curve_chart(_yc), use_container_width=True,
-                            config={"displayModeBar": False})
+                            config={"displayModeBar": False}, key="pc_yield_curve")
         with _yc2:
             if _s2510 is not None:
                 st.plotly_chart(yield_spread_chart(_s2510, "10Y − 2Y"), use_container_width=True,
-                                config={"displayModeBar": False})
+                                config={"displayModeBar": False}, key="pc_yield_spread")
         st.caption(f"Source: US Treasury Department daily yield curve rates (same primary source as "
                    f"ustreasuryyieldcurve.com) • As of {_yc.get('asof','—')} • Refreshes hourly")
     else:
@@ -1181,7 +1184,7 @@ with tab_watch:
         # ── Performance bar chart ─────────────────────────────────────────────
         chart_c, table_c = st.columns([1, 1])
         with chart_c:
-            st.plotly_chart(watchlist_performance_chart(merged), use_container_width=True)
+            st.plotly_chart(watchlist_performance_chart(merged), use_container_width=True, key="pc_1184")
 
         with table_c:
             section("Live Quotes & Relative Strength vs SPY (63-Day)")
@@ -1322,7 +1325,7 @@ with tab_heat_stocks:
         if not valid.empty:
             st.plotly_chart(
                 stocks_heatmap(valid, title=f"Watchlist Heatmap — {now.strftime('%d %b %Y')}"),
-                use_container_width=True
+                use_container_width=True, key="pc_wl_heatmap"
             )
         else:
             st.info("No price change data available.")
@@ -1340,7 +1343,7 @@ with tab_heat_stocks:
                 _etf_view["Ticker"] = _etf_view["Ticker"].map(lambda t: etf_map.get(t, t))
                 st.plotly_chart(
                     stocks_heatmap(_etf_view, title="Sector ETF Heatmap — Today"),
-                    use_container_width=True
+                    use_container_width=True, key="pc_etf_heatmap"
                 )
 
     # ── Performance table ─────────────────────────────────────────────────────
@@ -1402,9 +1405,9 @@ with tab_heat_stocks:
 
         hm_col, bar_col = st.columns([3, 2])
         with hm_col:
-            st.plotly_chart(sector_heatmap(sector_df, period_choice), use_container_width=True)
+            st.plotly_chart(sector_heatmap(sector_df, period_choice), use_container_width=True, key="pc_1405")
         with bar_col:
-            st.plotly_chart(sector_bars(sector_df, period_choice), use_container_width=True)
+            st.plotly_chart(sector_bars(sector_df, period_choice), use_container_width=True, key="pc_1407")
 
         section("Sector Performance Table — All Timeframes")
         pivot = sector_df.pivot_table(values="Return %", index="Sector", columns="Period")
@@ -1493,7 +1496,7 @@ with tab_breadth:
         section("Advance / Decline Line (30-Day Rolling)")
         ad_df = breadth.get("advance_decline", pd.DataFrame())
         if not ad_df.empty:
-            st.plotly_chart(advance_decline_chart(ad_df), use_container_width=True)
+            st.plotly_chart(advance_decline_chart(ad_df), use_container_width=True, key="pc_1496")
     else:
         st.error("Breadth data unavailable.")
 
@@ -1552,10 +1555,10 @@ with tab_vol:
         # VIX chart (left) + term structure bar (right)
         cv_col, ts_col = st.columns([2, 1])
         with cv_col:
-            st.plotly_chart(vix_chart(vix_df), use_container_width=True)
+            st.plotly_chart(vix_chart(vix_df), use_container_width=True, key="pc_1555")
         with ts_col:
             if not term_df.empty:
-                st.plotly_chart(vix_term_bar(term_df), use_container_width=True)
+                st.plotly_chart(vix_term_bar(term_df), use_container_width=True, key="pc_1558")
                 # Interpretation guide
                 st.markdown("""<div class='card-sm'>
                     <div style='font-size:.68rem;color:#6b7280;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em'>
@@ -1612,7 +1615,8 @@ with tab_vol:
         _hm = _cot.get(_hist_pick)
         if _hm is not None:
             st.plotly_chart(cot_net_chart(_hm["History"], _hist_pick),
-                            use_container_width=True, config={"displayModeBar": False})
+                            use_container_width=True, config={"displayModeBar": False},
+                            key="pc_cot_history")
         st.caption("Source: CFTC Traders-in-Financial-Futures + Disaggregated COT reports "
                    "(publicreporting.cftc.gov) — actual reported positions, updated every Friday "
                    "(as-of Tuesday). Percentile is the net position's rank over ~3 years of weekly data.")
@@ -1635,7 +1639,7 @@ with tab_vol:
                 <div style='font-size:.62rem;color:#4b5563;margin-top:4px'>20d: {s20:+.1f} &nbsp; 63d: {s63:+.1f}</div>
             </div>""", unsafe_allow_html=True)
 
-        st.plotly_chart(cta_exposure_chart(cta_data), use_container_width=True)
+        st.plotly_chart(cta_exposure_chart(cta_data), use_container_width=True, key="pc_1638")
         st.caption("⚠️ Proxy only — constructed from price momentum Z-scores, not actual CTA fund positioning data.")
 
 
@@ -1750,7 +1754,7 @@ with tab_review:
             chart_col, fund_col = st.columns([3, 1])
             with chart_col:
                 if not price_df.empty:
-                    st.plotly_chart(candlestick_chart(price_df, review_ticker), use_container_width=True)
+                    st.plotly_chart(candlestick_chart(price_df, review_ticker), use_container_width=True, key="pc_1753")
                 else:
                     st.warning("Price data unavailable.")
             with fund_col:
@@ -2100,7 +2104,7 @@ with tab_raven:
 
         # Macro liquidity bar chart
         if br_macro:
-            st.plotly_chart(macro_liquidity_chart(br_macro), use_container_width=True)
+            st.plotly_chart(macro_liquidity_chart(br_macro), use_container_width=True, key="pc_2103")
 
         # K-Economy quick reference
         st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
@@ -2199,7 +2203,7 @@ with tab_raven:
             # Kill zone radar chart
             # Only show T1-T3 in chart (T4 is always avoid)
             radar_df = tier_df[tier_df["Tier"] <= 3].copy()
-            st.plotly_chart(kill_zone_radar(radar_df), use_container_width=True)
+            st.plotly_chart(kill_zone_radar(radar_df), use_container_width=True, key="pc_2202")
 
             # ── Tier tables (T1 priority) ─────────────────────────────────────
             for tier_num, tier_label, tier_color, tier_desc in [
