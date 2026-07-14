@@ -1,6 +1,15 @@
 [server]
 headless = true
 
+[client]
+# Hide tracebacks/source paths from public viewers — details stay in server logs
+showErrorDetails = false
+toolbarMode = "viewer"
+
+[browser]
+# No usage telemetry
+gatherUsageStats = false
+
 [theme]
 base = "dark"
 backgroundColor = "#0d141c"

@@ -33,6 +33,30 @@ try:
 except Exception:
     pass
 
+
+# ── Security: redact secrets from anything shown to viewers ───────────────────
+import re as _re
+
+def redact_secrets(text) -> str:
+    """Strip API keys, tokens, webhook URLs and configured secret values from
+    any string before it is rendered in the UI (error messages, tracebacks)."""
+    s = str(text)
+    # exact values of every configured secret
+    for _name in ["FRED_API_KEY", "ANTHROPIC_API_KEY", "MAKE_WEBHOOK_URL",
+                  "DISCORD_WEBHOOK_URL", "UNUSUAL_WHALES_API_KEY",
+                  "PLOTLY_API_KEY", "GITHUB_TOKEN"]:
+        _v = os.getenv(_name, "")
+        if _v and len(_v) >= 8:
+            s = s.replace(_v, f"[{_name} REDACTED]")
+    # common credential patterns
+    s = _re.sub(r"api_key=[^&\s\"']+", "api_key=[REDACTED]", s)
+    s = _re.sub(r"sk-ant-[A-Za-z0-9\-_]{8,}", "sk-ant-[REDACTED]", s)
+    s = _re.sub(r"ghp_[A-Za-z0-9]{20,}", "ghp_[REDACTED]", s)
+    s = _re.sub(r"(hook\.(?:eu\d+\.)?make\.com/)[A-Za-z0-9]+", r"\1[REDACTED]", s)
+    s = _re.sub(r"(discord\.com/api/webhooks/)\S+", r"\1[REDACTED]", s)
+    s = _re.sub(r"(Bearer\s+)[A-Za-z0-9\-._~+/]+=*", r"\1[REDACTED]", s)
+    return s
+
 try:
     from src.data.macro_data import fetch_macro_indicators
     from src.data.market_data import (
@@ -75,7 +99,7 @@ try:
     )
 except Exception as _import_err:
     import traceback as _tb
-    st.error(f"**Startup import error** — please report this:\n\n```\n{_tb.format_exc()}\n```")
+    st.error(f"**Startup import error** — please report this:\n\n```\n{redact_secrets(_tb.format_exc())}\n```")
     st.stop()
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
@@ -485,7 +509,7 @@ try:
         _wl_quotes  = _f_wl_q.result()
         _wl_intraday = _f_wl_i.result()
 except Exception as _prefetch_err:
-    st.warning(f"⚠️ Prefetch error (non-fatal): {_prefetch_err}")
+    st.warning(f"⚠️ Prefetch error (non-fatal): {redact_secrets(_prefetch_err)}")
 
 _hdr_map = dict(zip(_hdr_quotes["Ticker"], _hdr_quotes.to_dict("records"))) if not _hdr_quotes.empty else {}
 
@@ -957,7 +981,7 @@ with st.expander("📤 Share Charts — Interactive HTML Export", expanded=False
             file_name=_fname, mime="text/html", key="plotly_exp_dl",
         )
     except Exception as _exp_err:
-        st.error(f"Export failed: {_exp_err}")
+        st.error(f"Export failed: {redact_secrets(_exp_err)}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TABS
@@ -1085,9 +1109,10 @@ with tab_macro:
                         ), use_container_width=True, key=f"macro_spark_{key}")
 
             except Exception as e:
-                st.error(f"Macro data error: {e}")
+                st.error(f"Macro data error: {redact_secrets(e)}")
                 with st.expander("Debug"):
-                    st.exception(e)
+                    import traceback as _mtb
+                    st.code(redact_secrets(_mtb.format_exc()), language="python")
 
     # ── US TREASURY YIELD CURVE — official Treasury Dept feed (no key) ────────
     section("🏛️ US Treasury Yield Curve — Official Treasury Department Data")
@@ -1738,7 +1763,7 @@ with tab_review:
             price_df = load_ohlcv(review_ticker, chart_period)
 
         if "error" in fund:
-            st.error(f"Could not load {review_ticker}: {fund['error']}")
+            st.error(f"Could not load {review_ticker}: {redact_secrets(fund['error'])}")
         else:
             rec = str(fund.get("recommendation","N/A")).upper()
             rec_color = "#10b981" if "buy" in rec.lower() else "#ef4444" if "sell" in rec.lower() else "#f59e0b"
@@ -1821,7 +1846,7 @@ with tab_review:
                                 {ai_text}
                             </div>""", unsafe_allow_html=True)
                         except Exception as e:
-                            st.error(f"AI error: {e}")
+                            st.error(f"AI error: {redact_secrets(e)}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2708,7 +2733,7 @@ with tab_agent:
                         )
                         _answer = ask_tactical_agent(_user_q, st.session_state.agent_chat, _ctx)
                     except Exception as _agent_err:
-                        _answer = f"⚠️ Agent error: {_agent_err}"
+                        _answer = f"⚠️ Agent error: {redact_secrets(_agent_err)}"
                 st.markdown(_answer)
             st.session_state.agent_chat.append({"role": "user", "content": _user_q})
             st.session_state.agent_chat.append({"role": "assistant", "content": _answer})
