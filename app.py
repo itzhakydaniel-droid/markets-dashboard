@@ -172,13 +172,23 @@ button[data-testid="collapsedControl"]    { display: none !important; }
 
 /* Indicator cards */
 .ind-card {
-    background: #111827; border: 1px solid #1e2533; border-radius: 12px;
+    background: linear-gradient(160deg,#16202e 0%,#101828 100%);
+    border: 1px solid #243040; border-radius: 14px;
     padding: 14px 16px; margin-bottom: 8px;
+    transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
 }
-.ind-name  { font-size: .78rem; color: #9ca3af; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
-.ind-value { font-size: 1.3rem; font-weight: 800; color: #f1f5f9; margin: 2px 0; }
-.ind-score-bar-bg   { background: #1e2533; border-radius: 99px; height: 6px; margin-top: 8px; }
+.ind-card:hover {
+    border-color: #f00069; transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(240,0,105,.14);
+}
+.ind-name  { font-size: .74rem; color: #a2b6df; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.ind-value { font-size: 1.35rem; font-weight: 800; color: #fffffe; margin: 2px 0; }
+.ind-score-bar-bg   { background: #1E2832; border-radius: 99px; height: 6px; margin-top: 8px; }
 .ind-score-bar-fill { border-radius: 99px; height: 6px; }
+.ind-chip {
+    display: inline-block; font-size: .64rem; font-weight: 800; padding: 2px 8px;
+    border-radius: 6px; letter-spacing: .02em;
+}
 .score-badge {
     display: inline-block; font-size: .7rem; font-weight: 700; padding: 2px 9px;
     border-radius: 99px; float: right; margin-top: -2px;
@@ -1067,19 +1077,22 @@ with tab_macro:
                         </div>""", unsafe_allow_html=True)
                     st.markdown("</div>", unsafe_allow_html=True)
 
-                section("Individual Indicator Scores  •  Max 10 pts each")
+                section("Individual Indicator Scores  •  Max 10 pts each  •  3M +2 · 6M +2 · YoY +3 · Threshold +3")
                 ind_cols = st.columns(4)
                 for i, s in enumerate(scores):
                     sc_pct = s.total / 10
                     bc = "#10b981" if sc_pct>=.7 else "#f59e0b" if sc_pct>=.4 else "#ef4444"
                     checks = [
-                        ("3M", s.score_3m), ("6M", s.score_6m),
-                        ("YoY", s.score_yoy), ("Abs", s.score_abs),
+                        ("3M Trend",   s.score_3m,  2),
+                        ("6M Trend",   s.score_6m,  2),
+                        ("YoY Trend",  s.score_yoy, 3),
+                        ("Threshold",  s.score_abs, 3),
                     ]
-                    checks_html = " ".join([
-                        f"<span style='color:{'#10b981' if v else '#ef4444'}'>"
-                        f"{'✓' if v else '✗'} {l}</span>"
-                        for l, v in checks
+                    checks_html = "".join([
+                        f"<span class='ind-chip' style='background:{'#10b98122' if v else '#ef444418'};"
+                        f"color:{'#10b981' if v else '#ef4444'}'>"
+                        f"{'✓' if v else '✗'} {l} {'+' + str(mx) if v else '0'}/{mx}</span>"
+                        for l, v, mx in checks
                     ])
                     with ind_cols[i % 4]:
                         st.markdown(f"""<div class='ind-card'>
@@ -1091,7 +1104,7 @@ with tab_macro:
                             <div class='ind-score-bar-bg'>
                                 <div class='ind-score-bar-fill' style='background:{bc};width:{sc_pct*100:.0f}%'></div>
                             </div>
-                            <div style='display:flex;gap:10px;margin-top:9px;font-size:.68rem;font-weight:600'>
+                            <div style='display:flex;gap:5px;margin-top:9px;flex-wrap:wrap'>
                                 {checks_html}
                             </div>
                         </div>""", unsafe_allow_html=True)
