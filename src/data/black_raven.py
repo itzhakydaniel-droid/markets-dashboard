@@ -42,7 +42,6 @@ MASTER_WATCHLIST: dict[str, dict] = {
     "CAMT":      {"tier": 2, "name": "Camtek",              "sector": "3D Optical Inspection",    "entry": "sma100", "entry_note": "100-Day SMA support"},
     "FORM":      {"tier": 2, "name": "FormFactor",          "sector": "Probe Cards",              "entry": "special","entry_note": "Trading channel bottom"},
     "COHR":      {"tier": 2, "name": "Coherent",            "sector": "Optics / Lasers",          "entry": "special","entry_note": "Extreme depth pullbacks"},
-    "AAOI":      {"tier": 2, "name": "Applied Opto",        "sector": "800G Transceivers",        "entry": "sma50",  "entry_note": "50-Day SMA"},
     "LITE":      {"tier": 2, "name": "Lumentum",            "sector": "Optical Routing",          "entry": "sma200", "entry_note": "200-Day SMA"},
     "CRDO":      {"tier": 2, "name": "Credo Technology",    "sector": "High-Speed AEC Cables",    "entry": "special","entry_note": "Volume confirmed breakout"},
     "ALAB":      {"tier": 2, "name": "Astera Labs",         "sector": "PCIe / Connectivity",      "entry": "special","entry_note": "Structural support zones"},
@@ -63,6 +62,10 @@ MASTER_WATCHLIST: dict[str, dict] = {
     "AMD":       {"tier": 3, "name": "AMD",                 "sector": "Alt Compute Hedge",        "entry": "sma200", "entry_note": "200-Day SMA"},
     "QCOM":      {"tier": 3, "name": "Qualcomm",            "sector": "Edge AI Processing",       "entry": "special","entry_note": "Deep macro pullbacks"},
     "PLTR":      {"tier": 3, "name": "Palantir",            "sector": "AI Enterprise OS",         "entry": "sma50",  "entry_note": "50-Day SMA"},
+    "AAOI":      {"tier": 3, "name": "Applied Opto",        "sector": "Lasers / Optical Transceivers DC", "entry": "sma200", "entry_note": "Deep support only — zero allocation at Elevated",
+                  "raven_override": ("HIGHLY CYCLICAL — buy limits at deep support structures only", "#f59e0b")},
+    "AXTI":      {"tier": 3, "name": "AXT Inc",             "sector": "Photonics Materials / Wafers", "entry": "sma200", "entry_note": "200-Day SMA — market flushes only",
+                  "raven_override": ("HIGH VOLATILITY — Deep Value logic strictly during flushes", "#f59e0b")},
     # ── TIER 4: DANGER ZONE — spenders, leveraged cloud, no pricing power ─────
     "SMCI":      {"tier": 4, "name": "Super Micro",         "sector": "OEM Margin Squeeze",       "entry": "avoid",  "entry_note": "Avoid / Short"},
     "DELL":      {"tier": 4, "name": "Dell",                "sector": "ODM Bypass Risk",          "entry": "avoid",  "entry_note": "Underweight"},
