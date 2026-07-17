@@ -604,3 +604,74 @@ def fetch_raven_dashboard() -> pd.DataFrame:
     if not df.empty:
         df = df.sort_values(["Tier", "Dist_Entry%"], ascending=[True, True], na_position="last")
     return df
+
+
+# ── AUTOMATED ENTRY MATRIX — absolute execution logic gates ───────────────────
+
+def _entry_matrix_gates(tier: int, price: float, sma50: float,
+                        sma100: float | None, sma200: float | None) -> tuple[float, str, str]:
+    """
+    Black Raven Protocol v1.0 — Automated Entry Matrix logic gates.
+    Returns (dist_50_pct, zone_status, execution_target).
+    """
+    dist_50 = (price - sma50) / sma50 * 100.0
+
+    if dist_50 >= 0.0:                       # GATE 1 — ELEVATED ZONE
+        return dist_50, "Elevated", "Hold / No Order"
+
+    if dist_50 >= -5.0:                      # GATE 2 — KILL ZONE (standard ambush)
+        return dist_50, "Kill Zone", f"${sma50:,.2f}"
+
+    # GATE 3 — DEEP VALUE (the flush)
+    if tier == 1:
+        tgt = f"${sma100:,.2f}" if sma100 else "100SMA n/a"
+    else:                                    # Tier 2 or 3
+        tgt = f"${sma200:,.2f}" if sma200 else "200SMA n/a"
+    return dist_50, "Deep Value", tgt
+
+
+def fetch_entry_matrix() -> pd.DataFrame:
+    """
+    Run the Automated Entry Matrix across Tiers 1-3 of the master watchlist.
+    Output columns match the protocol directive exactly:
+      Ticker | Tier | Current Price | Dist. 50SMA (%) | Zone Status | Execution Target
+    """
+    from src.data.price_fetcher import fetch_history_robust
+    from concurrent.futures import ThreadPoolExecutor
+
+    start = (datetime.now() - timedelta(days=330)).strftime("%Y-%m-%d")
+    universe = [(t, m) for t, m in MASTER_WATCHLIST.items() if m["tier"] in (1, 2, 3)]
+
+    def _one(item):
+        ticker, meta = item
+        try:
+            s = fetch_history_robust(ticker, start)
+            if s is None or s.empty or len(s) < 50:
+                return None
+            s = s.dropna().sort_index()
+            price  = float(s.iloc[-1])
+            sma50  = float(s.tail(50).mean())
+            sma100 = float(s.tail(100).mean()) if len(s) >= 100 else None
+            sma200 = float(s.tail(200).mean()) if len(s) >= 200 else None
+            dist, zone, target = _entry_matrix_gates(meta["tier"], price, sma50, sma100, sma200)
+            return {
+                "Ticker":           ticker,
+                "Tier":             meta["tier"],
+                "Current Price":    round(price, 2),
+                "Dist. 50SMA (%)":  round(dist, 2),
+                "Zone Status":      zone,
+                "Execution Target": target,
+            }
+        except Exception:
+            return None
+
+    rows = []
+    with ThreadPoolExecutor(max_workers=16) as ex:
+        for r in ex.map(_one, universe):
+            if r is not None:
+                rows.append(r)
+
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df = df.sort_values(["Tier", "Dist. 50SMA (%)"]).reset_index(drop=True)
+    return df

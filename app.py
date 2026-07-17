@@ -91,8 +91,8 @@ try:
     )
     from src.data.black_raven import (
         TIER_UNIVERSE, MASTER_WATCHLIST, score_catalyst, save_catalyst, load_catalysts,
-        fetch_tier_radar, fetch_macro_matrix, fetch_raven_dashboard, compute_hedge_params,
-        compute_rsi,
+        fetch_tier_radar, fetch_macro_matrix, fetch_raven_dashboard, fetch_entry_matrix,
+        compute_hedge_params, compute_rsi,
     )
     from src.data.tactical_agent import (
         build_live_context, ask_tactical_agent, is_agent_available, AGENT_SYSTEM_PROMPT,
@@ -393,6 +393,10 @@ def load_sector_ratings():
 @st.cache_data(ttl=300, show_spinner=False)          # BLACK RAVEN 50-stock sweep
 def load_raven_dashboard():
     return fetch_raven_dashboard()
+
+@st.cache_data(ttl=300, show_spinner=False)          # Automated Entry Matrix — logic gates
+def load_entry_matrix():
+    return fetch_entry_matrix()
 
 @st.cache_data(ttl=3600, show_spinner=False)         # Treasury yield curve — updates once per day EOD
 def load_yield_curve():
@@ -1899,10 +1903,74 @@ with tab_raven:
     # ── MODULE SELECTOR ───────────────────────────────────────────────────────
     br_mod = st.radio(
         "Module",
-        ["🦅 Master Dashboard", "🔄 Sector Rotation", "📡 Macro Matrix", "🎯 Kill Zone Radar", "📰 Catalyst Feed", "⚡ Execution Commands"],
+        ["🦅 Master Dashboard", "🧮 Entry Matrix", "🔄 Sector Rotation", "📡 Macro Matrix", "🎯 Kill Zone Radar", "📰 Catalyst Feed", "⚡ Execution Commands"],
         horizontal=True, label_visibility="collapsed",
     )
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # MODULE — AUTOMATED ENTRY MATRIX (absolute logic gates)
+    # ════════════════════════════════════════════════════════════════════════
+    if br_mod == "🧮 Entry Matrix":
+        section("AUTOMATED ENTRY MATRIX  •  Logic Gates: Elevated → Kill Zone → Deep Value")
+
+        with st.spinner("Running logic gates across Tiers 1-3…"):
+            em_df = load_entry_matrix()
+
+        if em_df.empty:
+            st.error("Entry Matrix returned no data.")
+        else:
+            _zc = {"Elevated": "#475467", "Kill Zone": "#10b981", "Deep Value": "#0CABC4"}
+            _n_elev = int((em_df["Zone Status"] == "Elevated").sum())
+            _n_kill = int((em_df["Zone Status"] == "Kill Zone").sum())
+            _n_deep = int((em_df["Zone Status"] == "Deep Value").sum())
+            _mc = st.columns(3)
+            for _c, (_lbl, _n, _clr, _sub) in zip(_mc, [
+                ("Elevated", _n_elev, "#475467", "Hold / no order"),
+                ("Kill Zone", _n_kill, "#10b981", "GTC limit @ 50SMA"),
+                ("Deep Value", _n_deep, "#0CABC2", "T1→100SMA · T2/T3→200SMA"),
+            ]):
+                _c.markdown(f"""<div class='kpi-tile' style='border-top:2px solid {_clr}'>
+                    <div class='kpi-label'>{_lbl}</div>
+                    <div class='kpi-value' style='color:{_clr}'>{_n}</div>
+                    <div style='font-size:.64rem;color:#a2b6df;font-weight:600'>{_sub}</div>
+                </div>""", unsafe_allow_html=True)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+            _em_rows = []
+            for _, _r in em_df.iterrows():
+                _z = _r["Zone Status"]
+                _clr = {"Elevated": "#475467", "Kill Zone": "#10b981", "Deep Value": "#0CABC2"}[_z]
+                _d = _r["Dist. 50SMA (%)"]
+                _dc = "#f59e0b" if _d >= 0 else "#10b981"
+                _em_rows.append(f"""<tr style='border-bottom:1px solid #1E2832'>
+                    <td style='padding:7px 10px;font-weight:800;color:#fffffe'>{_r["Ticker"]}</td>
+                    <td style='padding:7px 10px;color:#a2b6df;font-weight:700'>T{_r["Tier"]}</td>
+                    <td style='padding:7px 10px;color:#fffffe;font-weight:700'>${_r["Current Price"]:,.2f}</td>
+                    <td style='padding:7px 10px;color:{_dc};font-weight:700'>{_d:+.2f}%</td>
+                    <td style='padding:7px 10px'><span style='background:{_clr}18;color:{_clr};
+                        font-size:.72rem;font-weight:800;padding:3px 10px;border-radius:99px'>{_z.upper()}</span></td>
+                    <td style='padding:7px 10px;color:#5DC7D6;font-weight:800'>{_r["Execution Target"]}</td>
+                </tr>""")
+
+            st.markdown(f"""<div style='border-radius:12px;overflow-x:auto;border:1px solid #1E2832'>
+            <table style='width:100%;border-collapse:collapse;background:#101828;min-width:760px'>
+                <thead><tr style='background:#0d141c;border-bottom:1px solid #1E2832'>
+                    {''.join(f"<th style='padding:8px 10px;color:#a2b6df;font-size:.68rem;font-weight:800;text-transform:uppercase;text-align:left;letter-spacing:.05em'>{h}</th>"
+                             for h in ["Ticker","Tier","Current Price","Dist. 50SMA (%)","Zone Status","Execution Target"])}
+                </tr></thead>
+                <tbody>{''.join(_em_rows)}</tbody>
+            </table></div>""", unsafe_allow_html=True)
+
+            st.download_button(
+                "⬇ Export Matrix (CSV)",
+                data=em_df.to_csv(index=False),
+                file_name="black_raven_entry_matrix.csv", mime="text/csv",
+                key="em_csv_dl",
+            )
+            st.caption("Gates: Dist_50 ≥ 0% → Elevated (hold) · −5% ≤ Dist_50 < 0% → Kill Zone (GTC limit at 50SMA) · "
+                       "Dist_50 < −5% → Deep Value (T1 targets 100SMA, T2/T3 target 200SMA). "
+                       "Tiers 1-3 only — Tier 4 excluded by protocol. Protocol analytics — not financial advice.")
 
     # ════════════════════════════════════════════════════════════════════════
     # MODULE — SECTOR ROTATION ENGINE (Institutional Sector Scorecard)
