@@ -32,6 +32,9 @@ MASTER_WATCHLIST: dict[str, dict] = {
     "ASX":       {"tier": 1, "name": "ASE Technology",      "sector": "Advanced Packaging",       "entry": "sma50",  "entry_note": "50-Day SMA"},
     "AMKR":      {"tier": 1, "name": "Amkor",               "sector": "US Advanced Packaging",    "entry": "sma100", "entry_note": "100-Day SMA"},
     "ANET":      {"tier": 1, "name": "Arista Networks",     "sector": "Cloud Switching",          "entry": "sma50",  "entry_note": "50-Day SMA"},
+    "LEU":       {"tier": 1, "name": "Centrus Energy",      "sector": "HALEU Enrichment Monopoly","entry": "sma50",  "entry_note": "50-Day SMA — ambush on panic/backlog disconnects",
+                  "linked": ["CEG", "VST"],
+                  "raven_override": ("RARE CAPACITY HOLDER — sole licensed US HALEU producer; watch CEG/VST LTA & NRC triggers", "#10b981")},
     # ── TIER 2: High Conviction — test, measurement, optics, infra layer ──────
     "AMAT":      {"tier": 2, "name": "Applied Materials",   "sector": "Wafer Fab Equipment",      "entry": "sma100", "entry_note": "100-Day SMA"},
     "LRCX":      {"tier": 2, "name": "Lam Research",        "sector": "Memory Etch Equipment",    "entry": "special","entry_note": "Sector pullbacks"},
