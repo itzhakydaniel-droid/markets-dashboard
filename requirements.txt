@@ -10,4 +10,5 @@ anthropic
 beautifulsoup4
 lxml
 curl_cffi
-# force rebuild 2026-07-08
+streamlit-autorefresh
+# force rebuild 2026-07-22

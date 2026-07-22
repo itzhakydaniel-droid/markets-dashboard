@@ -311,6 +311,16 @@ div[data-testid="stMetricDelta"]  { font-size: .8rem !important; font-weight: 60
 
 REFRESH_SEC = int(os.getenv("REFRESH_INTERVAL_SECONDS", 300))
 
+# ── Live auto-refresh — reruns the app on a timer so quotes/% never go stale
+# without a manual click. Cache TTLs above still gate the actual network
+# calls, so this just makes the rerun happen automatically.
+LIVE_REFRESH_SEC = int(os.getenv("LIVE_REFRESH_SECONDS", 60))
+try:
+    from streamlit_autorefresh import st_autorefresh
+    st_autorefresh(interval=LIVE_REFRESH_SEC * 1000, key="_live_autorefresh")
+except Exception:
+    pass  # optional dependency — app still works via manual ⟳ refresh
+
 # ── Session state ─────────────────────────────────────────────────────────────
 for k, v in [
     ("watchlist", DEFAULT_WATCHLIST.copy()),
@@ -542,7 +552,8 @@ with title_col:
                     background-clip:text'>Markets Intelligence</span>
         </div>
         <div style='font-size:.72rem;color:#a2b6df;margin-top:3px'>
-            {now.strftime('%A %d %b %Y')} &nbsp;•&nbsp; {now.strftime('%H:%M')} ET &nbsp;•&nbsp; Auto-refresh {REFRESH_SEC//60}m
+            {now.strftime('%A %d %b %Y')} &nbsp;•&nbsp; {now.strftime('%H:%M:%S')} ET &nbsp;•&nbsp;
+            <span style='color:#10b981'>● LIVE</span> auto-refresh {LIVE_REFRESH_SEC}s
         </div>
     </div>""", unsafe_allow_html=True)
 
