@@ -400,7 +400,7 @@ def load_intraday(tickers, interval: str = "5m", range_: str = "1d"):
 def load_sector_ratings():
     return fetch_sector_ratings(years=2)
 
-@st.cache_data(ttl=300, show_spinner=False)          # BLACK RAVEN 50-stock sweep
+@st.cache_data(ttl=300, show_spinner=False)          # BLACK RAVEN 61-stock sweep
 def load_raven_dashboard():
     return fetch_raven_dashboard()
 
@@ -2086,7 +2086,7 @@ with tab_raven:
                        "Analytical tool — not financial advice.")
 
     # ════════════════════════════════════════════════════════════════════════
-    # MODULE 0 — MASTER DASHBOARD (50-stock institutional table + BLACK RAVEN)
+    # MODULE 0 — MASTER DASHBOARD (61-stock institutional table + BLACK RAVEN)
     # ════════════════════════════════════════════════════════════════════════
     if br_mod == "🦅 Master Dashboard":
         section("MASTER WATCHLIST — 50 CORE STOCKS  •  Spenders vs. Receivers  •  Live Algorithmic Alerts")

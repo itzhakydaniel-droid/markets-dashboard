@@ -11,7 +11,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# ── Master Watchlist — 50 core stocks, institutional ranking ─────────────────
+# ── Master Watchlist — 61 core stocks, institutional ranking ─────────────────
 # Entry types: sma50 / sma100 / sma200 → limit order at that moving average.
 # "special" → discretionary structural rule (textual); 50-SMA shown as anchor.
 
@@ -45,6 +45,7 @@ MASTER_WATCHLIST: dict[str, dict] = {
     "CAMT":      {"tier": 2, "name": "Camtek",              "sector": "3D Optical Inspection",    "entry": "sma100", "entry_note": "100-Day SMA support"},
     "FORM":      {"tier": 2, "name": "FormFactor",          "sector": "Probe Cards",              "entry": "special","entry_note": "Trading channel bottom"},
     "COHR":      {"tier": 2, "name": "Coherent",            "sector": "Optics / Lasers",          "entry": "special","entry_note": "Extreme depth pullbacks"},
+    "AAOI":      {"tier": 2, "name": "Applied Opto",        "sector": "800G Optical Transceivers","entry": "sma50",  "entry_note": "50-Day SMA"},
     "LITE":      {"tier": 2, "name": "Lumentum",            "sector": "Optical Routing",          "entry": "sma200", "entry_note": "200-Day SMA"},
     "CRDO":      {"tier": 2, "name": "Credo Technology",    "sector": "High-Speed AEC Cables",    "entry": "special","entry_note": "Volume confirmed breakout"},
     "ALAB":      {"tier": 2, "name": "Astera Labs",         "sector": "PCIe / Connectivity",      "entry": "special","entry_note": "Structural support zones"},
@@ -52,25 +53,34 @@ MASTER_WATCHLIST: dict[str, dict] = {
     "ALGM":      {"tier": 2, "name": "Allegro Micro",       "sector": "Power ICs / Physical AI",  "entry": "sma200", "entry_note": "200-Day SMA"},
     "AIP":       {"tier": 2, "name": "Arteris",             "sector": "Custom Silicon & IP / NoC","entry": "sma50",  "entry_note": "50-Day SMA + Volume Confirmation",
                   "raven_override": ("MICRO-CAP LIQUIDITY WATCH — monitor volume spikes & VaR expansion", "#f59e0b")},
+    "VICR":      {"tier": 2, "name": "Vicor",               "sector": "Point-of-Load Power Delivery", "entry": "special","entry_note": "Scaled limit orders at 50/100-Day SMA"},
+    "WDC":       {"tier": 2, "name": "Western Digital",     "sector": "Nearline HDD / Cold-Storage Bottleneck", "entry": "sma50", "entry_note": "50-Day SMA",
+                  "raven_override": ("STORAGE BOTTLENECK ALPHA — nearline HDD cold-data archive scarcity", "#10b981")},
+    "STX":       {"tier": 2, "name": "Seagate",             "sector": "Nearline HDD Mass Storage","entry": "sma50",  "entry_note": "50-Day SMA",
+                  "raven_override": ("STORAGE BOTTLENECK ALPHA — nearline HDD cold-data archive scarcity", "#10b981")},
     # ── TIER 3: Medium Conviction — policy beta, integration, hedges ──────────
     "POWL":      {"tier": 3, "name": "Powell Industries",   "sector": "Electrical Enclosures",    "entry": "sma50",  "entry_note": "50-Day SMA"},
     "NVT":       {"tier": 3, "name": "nVent Electric",      "sector": "Liquid Cooling Enclosures","entry": "sma100", "entry_note": "100-Day SMA"},
-    "GEV":       {"tier": 3, "name": "GE Vernova",          "sector": "Grid Power Generation",    "entry": "special","entry_note": "Post-breakout consolidation"},
-    "PWR":       {"tier": 3, "name": "Quanta Services",     "sector": "Grid Contracting",         "entry": "special","entry_note": "Long-term accumulation"},
+    "GEV":       {"tier": 3, "name": "GE Vernova",          "sector": "Grid Power Generation",    "entry": "special","entry_note": "Post-breakout consolidation",
+                  "raven_override": ("PERMITTING & POWER GRID DELAY — verify approved interconnects vs. paper megawatts", "#f59e0b")},
+    "PWR":       {"tier": 3, "name": "Quanta Services",     "sector": "Grid Contracting",         "entry": "special","entry_note": "Long-term accumulation",
+                  "raven_override": ("PERMITTING & POWER GRID DELAY — verify approved interconnects vs. paper megawatts", "#f59e0b")},
     "MOD":       {"tier": 3, "name": "Modine",              "sector": "Thermal / HVAC",           "entry": "sma100", "entry_note": "100-Day SMA"},
     "MKSI":      {"tier": 3, "name": "MKS Instruments",     "sector": "Vacuum / Lasers WFE",      "entry": "sma200", "entry_note": "200-Day SMA"},
     "PENG":      {"tier": 3, "name": "Penguin Solutions",   "sector": "AI Infra Integration",     "entry": "sma100", "entry_note": "100-Day SMA"},
-    "WDC":       {"tier": 3, "name": "Western Digital",     "sector": "Storage / NAND",           "entry": "sma50",  "entry_note": "50-Day SMA"},
     "ARM":       {"tier": 3, "name": "Arm Holdings",        "sector": "Power-Efficient Arch",     "entry": "sma100", "entry_note": "100-Day SMA"},
     "AMD":       {"tier": 3, "name": "AMD",                 "sector": "Alt Compute Hedge",        "entry": "sma200", "entry_note": "200-Day SMA"},
     "QCOM":      {"tier": 3, "name": "Qualcomm",            "sector": "Edge AI Processing",       "entry": "special","entry_note": "Deep macro pullbacks"},
     "PLTR":      {"tier": 3, "name": "Palantir",            "sector": "AI Enterprise OS",         "entry": "sma50",  "entry_note": "50-Day SMA"},
-    "AAOI":      {"tier": 3, "name": "Applied Opto",        "sector": "Lasers / Optical Transceivers DC", "entry": "sma200", "entry_note": "Deep support only — zero allocation at Elevated",
-                  "raven_override": ("HIGHLY CYCLICAL — buy limits at deep support structures only", "#f59e0b")},
+    "PANW":      {"tier": 3, "name": "Palo Alto Networks",  "sector": "AI Cybersecurity / Observability", "entry": "sma50", "entry_note": "50-Day SMA"},
+    "NET":       {"tier": 3, "name": "Cloudflare",          "sector": "Edge Network Security / Data Infra", "entry": "sma100", "entry_note": "100-Day SMA"},
+    # NOTE: AXTI (AXT Inc) is not in the latest pasted master-list spec — kept
+    # here pending confirmation since it was a deliberate recent addition.
     "AXTI":      {"tier": 3, "name": "AXT Inc",             "sector": "Photonics Materials / Wafers", "entry": "sma200", "entry_note": "200-Day SMA — market flushes only",
                   "raven_override": ("HIGH VOLATILITY — Deep Value logic strictly during flushes", "#f59e0b")},
     # ── TIER 4: DANGER ZONE — spenders, leveraged cloud, no pricing power ─────
-    "SMCI":      {"tier": 4, "name": "Super Micro",         "sector": "OEM Margin Squeeze",       "entry": "avoid",  "entry_note": "Avoid / Short"},
+    "SMCI":      {"tier": 4, "name": "Super Micro",         "sector": "OEM Margin Squeeze",       "entry": "avoid",  "entry_note": "Avoid / Short",
+                  "raven_override": ("MARGIN COMPRESSION TRAP — revenue beats diluted by collapsing gross margins", "#ef4444")},
     "DELL":      {"tier": 4, "name": "Dell",                "sector": "ODM Bypass Risk",          "entry": "avoid",  "entry_note": "Underweight"},
     "HPE":       {"tier": 4, "name": "HP Enterprise",       "sector": "Legacy Server Margin",     "entry": "avoid",  "entry_note": "Avoid"},
     "META":      {"tier": 4, "name": "Meta Platforms",      "sector": "High CapEx / ROI Unproven","entry": "avoid",  "entry_note": "Underweight"},
@@ -78,6 +88,10 @@ MASTER_WATCHLIST: dict[str, dict] = {
     "MSFT":      {"tier": 4, "name": "Microsoft",           "sector": "Premium Valuation",        "entry": "avoid",  "entry_note": "Underweight"},
     "AMZN":      {"tier": 4, "name": "Amazon",              "sector": "Utility / Power Costs",    "entry": "avoid",  "entry_note": "Pairs trading only"},
     "ORCL":      {"tier": 4, "name": "Oracle",              "sector": "Debt-Funded DC Buildout",  "entry": "avoid",  "entry_note": "Short-term trading only"},
+    "MNDY":      {"tier": 4, "name": "monday.com",           "sector": "Legacy SaaS / AI Disintermediation", "entry": "avoid", "entry_note": "Underweight / Avoid"},
+    "PEGA":      {"tier": 4, "name": "Pegasystems",          "sector": "Legacy SaaS / AI Disintermediation", "entry": "avoid", "entry_note": "Underweight / Avoid"},
+    "ADBE":      {"tier": 4, "name": "Adobe",                "sector": "Legacy SaaS / AI Disintermediation", "entry": "avoid", "entry_note": "Underweight / Avoid"},
+    "CRM":       {"tier": 4, "name": "Salesforce",           "sector": "Legacy SaaS / AI Disintermediation", "entry": "avoid", "entry_note": "Underweight / Avoid"},
 }
 
 # Backwards-compatible tier→{ticker: "Name — sector"} view used by fetch_tier_radar
@@ -523,13 +537,13 @@ def _raven_alert(d: dict, vix_up: bool) -> tuple[str, str]:
     if entry_px and (price / entry_px - 1) * 100 >= 12:
         return ("EXTENDED — no chase, wait for flush", "#f59e0b")
 
-    return ("SAFE / STABLE", "#10b981")
+    return ("SAFE / STRUCTURAL MONOPOLY", "#10b981")
 
 
 def fetch_raven_dashboard() -> pd.DataFrame:
     """
     Build the mandatory 6-column BLACK RAVEN dashboard table for the
-    50-stock master watchlist:
+    61-stock master watchlist:
       Ticker | Company | Tier | Hardware Sector | Optimal Entry | BLACK RAVEN
     All prices computed from ~1y of daily bars, fetched in parallel.
     """
