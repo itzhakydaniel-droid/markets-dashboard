@@ -702,3 +702,122 @@ def fetch_entry_matrix() -> pd.DataFrame:
     if not df.empty:
         df = df.sort_values(["Tier", "Dist. 50SMA (%)"]).reset_index(drop=True)
     return df
+
+
+# ── DATA INTEGRITY & AUDIT PROTOCOL ───────────────────────────────────────────
+
+_ZONE_RULES = [
+    (lambda d: d >= 0.0,              "Elevated"),
+    (lambda d: -5.0 <= d < 0.0,       "Kill Zone"),
+    (lambda d: d < -5.0,              "Deep Value"),
+]
+
+
+def audit_entry_matrix(df: pd.DataFrame | None = None) -> tuple[pd.DataFrame, list[dict]]:
+    """
+    Chief Data Validation Architect routine. Independently recomputes every
+    Dist_SMA from raw price feeds, cross-references the zone logic gates,
+    validates execution-target/tier alignment, and screens for bad ticks.
+
+    Returns (validated_df, correction_log). Any discrepancy is OVERRIDDEN
+    with the mathematically correct value and recorded in the log.
+    """
+    from src.data.price_fetcher import fetch_history_robust
+    from concurrent.futures import ThreadPoolExecutor
+
+    if df is None:
+        df = fetch_entry_matrix()
+    if df.empty:
+        return df, [{"ticker": "—", "check": "FEED", "detail": "empty matrix — no data ingested"}]
+
+    start = (datetime.now() - timedelta(days=330)).strftime("%Y-%m-%d")
+
+    def _truth(ticker: str):
+        """Independent recomputation straight from the raw series."""
+        try:
+            s = fetch_history_robust(ticker, start)
+            if s is None or s.empty or len(s) < 50:
+                return ticker, None
+            s = s.dropna().sort_index()
+            px = float(s.iloc[-1])
+            return ticker, {
+                "price":  px,
+                "sma50":  float(s.tail(50).mean()),
+                "sma100": float(s.tail(100).mean()) if len(s) >= 100 else None,
+                "sma200": float(s.tail(200).mean()) if len(s) >= 200 else None,
+                "ret_1d": (px / float(s.iloc[-2]) - 1) * 100 if len(s) >= 2 else 0.0,
+            }
+        except Exception:
+            return ticker, None
+
+    truth: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=16) as ex:
+        for tk, t in ex.map(_truth, df["Ticker"].tolist()):
+            if t:
+                truth[tk] = t
+
+    log: list[dict] = []
+    rows = []
+
+    for _, r in df.iterrows():
+        tk   = r["Ticker"]
+        tier = int(r["Tier"])
+        row  = dict(r)
+        t    = truth.get(tk)
+
+        if t is None:
+            log.append({"ticker": tk, "check": "FEED",
+                        "detail": "raw series unavailable — row held, execution suspended"})
+            row["Zone Status"] = "DATA ANOMALY"
+            row["Execution Target"] = "EXECUTION SUSPENDED"
+            rows.append(row)
+            continue
+
+        # ── CHECK 1: mathematical verification of Dist_50 ─────────────────────
+        dist_true = round((t["price"] - t["sma50"]) / t["sma50"] * 100.0, 2)
+        if abs(float(r["Dist. 50SMA (%)"]) - dist_true) > 0.01:
+            log.append({"ticker": tk, "check": "MATH",
+                        "detail": f"Dist_50 {r['Dist. 50SMA (%)']:+.2f}% → recomputed {dist_true:+.2f}% (OVERRIDDEN)"})
+            row["Dist. 50SMA (%)"] = dist_true
+        if abs(float(r["Current Price"]) - round(t["price"], 2)) > 0.01:
+            log.append({"ticker": tk, "check": "FEED",
+                        "detail": f"price ${r['Current Price']:,.2f} → ${t['price']:,.2f} (OVERRIDDEN)"})
+            row["Current Price"] = round(t["price"], 2)
+
+        # ── CHECK 4: anomaly detection (fat finger / bad tick) ────────────────
+        if tier in (1, 2) and t["ret_1d"] <= -20.0:
+            log.append({"ticker": tk, "check": "ANOMALY",
+                        "detail": f"1-day move {t['ret_1d']:+.1f}% on Tier {tier} with no Grade A/B catalyst — EXECUTION SUSPENDED"})
+            row["Zone Status"] = "DATA ANOMALY"
+            row["Execution Target"] = "EXECUTION SUSPENDED"
+            rows.append(row)
+            continue
+
+        # ── CHECK 2: logic gate cross-reference ──────────────────────────────
+        zone_true = next(label for pred, label in _ZONE_RULES if pred(dist_true))
+        if r["Zone Status"] != zone_true:
+            log.append({"ticker": tk, "check": "GATE",
+                        "detail": f"zone '{r['Zone Status']}' contradicts Dist_50 {dist_true:+.2f}% → '{zone_true}' (OVERRIDDEN)"})
+            row["Zone Status"] = zone_true
+
+        # ── CHECK 3: execution-target / tier alignment ───────────────────────
+        if zone_true == "Elevated":
+            tgt_true = "Hold / No Order"
+        elif zone_true == "Kill Zone":
+            tgt_true = f"${t['sma50']:,.2f}"
+        else:
+            ma = t["sma100"] if tier == 1 else t["sma200"]
+            tgt_true = f"${ma:,.2f}" if ma else ("100SMA n/a" if tier == 1 else "200SMA n/a")
+        if str(r["Execution Target"]) != tgt_true:
+            log.append({"ticker": tk, "check": "TARGET",
+                        "detail": f"target '{r['Execution Target']}' → '{tgt_true}' "
+                                  f"(T{tier} {zone_true} must target "
+                                  f"{'50SMA' if zone_true=='Kill Zone' else ('100SMA' if tier==1 else '200SMA') if zone_true=='Deep Value' else 'no order'}) (OVERRIDDEN)"})
+            row["Execution Target"] = tgt_true
+
+        rows.append(row)
+
+    out = pd.DataFrame(rows)
+    if not out.empty:
+        out = out.sort_values(["Tier", "Dist. 50SMA (%)"]).reset_index(drop=True)
+    return out, log

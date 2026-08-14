@@ -92,7 +92,7 @@ try:
     from src.data.black_raven import (
         TIER_UNIVERSE, MASTER_WATCHLIST, score_catalyst, save_catalyst, load_catalysts,
         fetch_tier_radar, fetch_macro_matrix, fetch_raven_dashboard, fetch_entry_matrix,
-        compute_hedge_params, compute_rsi,
+        audit_entry_matrix, compute_hedge_params, compute_rsi,
     )
     from src.data.tactical_agent import (
         build_live_context, ask_tactical_agent, is_agent_available, AGENT_SYSTEM_PROMPT,
@@ -406,7 +406,8 @@ def load_raven_dashboard():
 
 @st.cache_data(ttl=300, show_spinner=False)          # Automated Entry Matrix — logic gates
 def load_entry_matrix():
-    return fetch_entry_matrix()
+    """Gate output passed through the Data Integrity & Audit Protocol."""
+    return audit_entry_matrix(fetch_entry_matrix())
 
 @st.cache_data(ttl=3600, show_spinner=False)         # Treasury yield curve — updates once per day EOD
 def load_yield_curve():
@@ -1925,13 +1926,33 @@ with tab_raven:
     if br_mod == "🧮 Entry Matrix":
         section("AUTOMATED ENTRY MATRIX  •  Logic Gates: Elevated → Kill Zone → Deep Value")
 
-        with st.spinner("Running logic gates across Tiers 1-3…"):
-            em_df = load_entry_matrix()
+        with st.spinner("Running logic gates + data-integrity audit…"):
+            em_df, em_log = load_entry_matrix()
+
+        # ── DATA CORRECTION LOG / integrity banner ───────────────────────────
+        if em_log:
+            _log_rows = "".join(
+                f"<div style='font-size:.76rem;color:#a2b6df;padding:3px 0'>"
+                f"<span style='color:#ef4444;font-weight:800'>[{_e['check']}]</span> "
+                f"<b style='color:#fffffe'>{_e['ticker']}</b> — {_e['detail']}</div>"
+                for _e in em_log)
+            st.markdown(f"""<div class='card' style='border-left:4px solid #ef4444;padding:14px 20px'>
+                <div style='font-size:.9rem;font-weight:800;color:#ef4444;margin-bottom:8px'>
+                    ⚠ DATA CORRECTION LOG — {len(em_log)} discrepanc{'y' if len(em_log)==1 else 'ies'} overridden
+                </div>{_log_rows}</div>""", unsafe_allow_html=True)
+        else:
+            st.markdown("""<div class='card-sm' style='border-left:3px solid #10b981;
+                        font-size:.82rem;color:#10b981;font-weight:800'>
+                [Data Integrity Verified] — all distances, logic gates and execution targets
+                independently recomputed and confirmed. No discrepancies.
+            </div>""", unsafe_allow_html=True)
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
         if em_df.empty:
             st.error("Entry Matrix returned no data.")
         else:
-            _zc = {"Elevated": "#475467", "Kill Zone": "#10b981", "Deep Value": "#0CABC4"}
+            _zc = {"Elevated": "#475467", "Kill Zone": "#10b981", "Deep Value": "#0CABC2",
+                   "DATA ANOMALY": "#ef4444"}
             _n_elev = int((em_df["Zone Status"] == "Elevated").sum())
             _n_kill = int((em_df["Zone Status"] == "Kill Zone").sum())
             _n_deep = int((em_df["Zone Status"] == "Deep Value").sum())
@@ -1951,7 +1972,7 @@ with tab_raven:
             _em_rows = []
             for _, _r in em_df.iterrows():
                 _z = _r["Zone Status"]
-                _clr = {"Elevated": "#475467", "Kill Zone": "#10b981", "Deep Value": "#0CABC2"}[_z]
+                _clr = _zc.get(_z, "#ef4444")
                 _d = _r["Dist. 50SMA (%)"]
                 _dc = "#f59e0b" if _d >= 0 else "#10b981"
                 _em_rows.append(f"""<tr style='border-bottom:1px solid #1E2832'>
