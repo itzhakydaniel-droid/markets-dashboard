@@ -11,7 +11,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# ── Master Watchlist — 61 core stocks, institutional ranking ─────────────────
+# ── Master Watchlist — 65 core stocks, institutional ranking ─────────────────
 # Entry types: sma50 / sma100 / sma200 → limit order at that moving average.
 # "special" → discretionary structural rule (textual); 50-SMA shown as anchor.
 
@@ -35,6 +35,9 @@ MASTER_WATCHLIST: dict[str, dict] = {
     "LEU":       {"tier": 1, "name": "Centrus Energy",      "sector": "HALEU Enrichment Monopoly","entry": "sma50",  "entry_note": "50-Day SMA — ambush on panic/backlog disconnects",
                   "linked": ["CEG", "VST"],
                   "raven_override": ("RARE CAPACITY HOLDER — sole licensed US HALEU producer; watch CEG/VST LTA & NRC triggers", "#10b981")},
+    "NEM":       {"tier": 1, "name": "Newmont",              "sector": "Macro Hedge / Gold FCF Machine", "entry": "special", "entry_note": "Limit orders on market pullbacks",
+                  "raven_override": ("MACRO HEDGE — gold FCF machine; accumulate on broad-market flushes", "#f59e0b")},
+    "CAT":       {"tier": 1, "name": "Caterpillar",          "sector": "Power Infra / Distributed Gen",  "entry": "special", "entry_note": "Limit orders on market pullbacks"},
     # ── TIER 2: High Conviction — test, measurement, optics, infra layer ──────
     "AMAT":      {"tier": 2, "name": "Applied Materials",   "sector": "Wafer Fab Equipment",      "entry": "sma100", "entry_note": "100-Day SMA"},
     "LRCX":      {"tier": 2, "name": "Lam Research",        "sector": "Memory Etch Equipment",    "entry": "special","entry_note": "Sector pullbacks"},
@@ -44,10 +47,13 @@ MASTER_WATCHLIST: dict[str, dict] = {
     "ONTO":      {"tier": 2, "name": "Onto Innovation",     "sector": "Packaging Metrology",      "entry": "special","entry_note": "10%+ pullback from highs"},
     "CAMT":      {"tier": 2, "name": "Camtek",              "sector": "3D Optical Inspection",    "entry": "sma100", "entry_note": "100-Day SMA support"},
     "FORM":      {"tier": 2, "name": "FormFactor",          "sector": "Probe Cards",              "entry": "special","entry_note": "Trading channel bottom"},
-    "COHR":      {"tier": 2, "name": "Coherent",            "sector": "Optics / Lasers",          "entry": "special","entry_note": "Extreme depth pullbacks"},
+    "COHR":      {"tier": 2, "name": "Coherent",            "sector": "Optics / Lasers (GM 40.2%)","entry": "special","entry_note": "Extreme depth pullbacks",
+                  "raven_override": ("PRICING POWER CONFIRMED — GM expansion to 40.2%, extreme DC transceiver demand", "#10b981")},
     "AAOI":      {"tier": 2, "name": "Applied Opto",        "sector": "800G Optical Transceivers","entry": "sma50",  "entry_note": "50-Day SMA"},
     "LITE":      {"tier": 2, "name": "Lumentum",            "sector": "Optical Routing",          "entry": "sma200", "entry_note": "200-Day SMA"},
     "CRDO":      {"tier": 2, "name": "Credo Technology",    "sector": "High-Speed AEC Cables",    "entry": "special","entry_note": "Volume confirmed breakout"},
+    "FCX":       {"tier": 2, "name": "Freeport-McMoRan",     "sector": "Base Metals / Copper Electrification", "entry": "special", "entry_note": "Accumulate on macro dips"},
+    "NET":       {"tier": 2, "name": "Cloudflare",           "sector": "AI Software / Cybersecurity", "entry": "special", "entry_note": "Support levels"},
     "ALAB":      {"tier": 2, "name": "Astera Labs",         "sector": "PCIe / Connectivity",      "entry": "special","entry_note": "Structural support zones"},
     "NVTS":      {"tier": 2, "name": "Navitas Semi",        "sector": "GaN Power Efficiency",     "entry": "special","entry_note": "Aggressive red days"},
     "ALGM":      {"tier": 2, "name": "Allegro Micro",       "sector": "Power ICs / Physical AI",  "entry": "sma200", "entry_note": "200-Day SMA"},
@@ -73,14 +79,15 @@ MASTER_WATCHLIST: dict[str, dict] = {
     "QCOM":      {"tier": 3, "name": "Qualcomm",            "sector": "Edge AI Processing",       "entry": "special","entry_note": "Deep macro pullbacks"},
     "PLTR":      {"tier": 3, "name": "Palantir",            "sector": "AI Enterprise OS",         "entry": "sma50",  "entry_note": "50-Day SMA"},
     "PANW":      {"tier": 3, "name": "Palo Alto Networks",  "sector": "AI Cybersecurity / Observability", "entry": "sma50", "entry_note": "50-Day SMA"},
-    "NET":       {"tier": 3, "name": "Cloudflare",          "sector": "Edge Network Security / Data Infra", "entry": "sma100", "entry_note": "100-Day SMA"},
     # NOTE: AXTI (AXT Inc) is not in the latest pasted master-list spec — kept
     # here pending confirmation since it was a deliberate recent addition.
     "AXTI":      {"tier": 3, "name": "AXT Inc",             "sector": "Photonics Materials / Wafers", "entry": "sma200", "entry_note": "200-Day SMA — market flushes only",
                   "raven_override": ("HIGH VOLATILITY — Deep Value logic strictly during flushes", "#f59e0b")},
+    "RKLB":      {"tier": 3, "name": "Rocket Lab",           "sector": "Space Economy Backlog",     "entry": "special", "entry_note": "Structural support — size for volatility",
+                  "raven_override": ("EXECUTION RISK / EARNINGS VOLATILITY", "#f97316")},
     # ── TIER 4: DANGER ZONE — spenders, leveraged cloud, no pricing power ─────
-    "SMCI":      {"tier": 4, "name": "Super Micro",         "sector": "OEM Margin Squeeze",       "entry": "avoid",  "entry_note": "Avoid / Short",
-                  "raven_override": ("MARGIN COMPRESSION TRAP — revenue beats diluted by collapsing gross margins", "#ef4444")},
+    "SMCI":      {"tier": 4, "name": "Super Micro",         "sector": "OEM Margin Collapse (GM 11.2%)", "entry": "avoid",  "entry_note": "Avoid / Short — split rally is not a thesis change",
+                  "raven_override": ("LIQUIDITY ANOMALY / RETAIL FOMO TRAP — GM collapsed to 11.2%; 10-for-1 split rally ignored", "#ef4444")},
     "DELL":      {"tier": 4, "name": "Dell",                "sector": "ODM Bypass Risk",          "entry": "avoid",  "entry_note": "Underweight"},
     "HPE":       {"tier": 4, "name": "HP Enterprise",       "sector": "Legacy Server Margin",     "entry": "avoid",  "entry_note": "Avoid"},
     "META":      {"tier": 4, "name": "Meta Platforms",      "sector": "High CapEx / ROI Unproven","entry": "avoid",  "entry_note": "Underweight"},
