@@ -36,3 +36,11 @@ env/
 # Logs & temp
 *.log
 /tmp/
+# Insiders Club: club content stays local (public repo). Only the analyst's
+# own derived data that the dashboard needs is published.
+insiders_club/*
+!insiders_club/knowledge/
+insiders_club/knowledge/*
+!insiders_club/knowledge/club_ranking.csv
+!insiders_club/knowledge/estimates_ratio.csv
+!insiders_club/screen_latest.csv

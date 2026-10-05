@@ -2,7 +2,7 @@ streamlit
 pandas
 numpy
 plotly
-yfinance
+yfinance>=1.2
 fredapi
 requests
 python-dotenv
@@ -12,3 +12,5 @@ lxml
 curl_cffi
 streamlit-autorefresh
 # force rebuild 2026-07-22
+tabulate
+markdown

@@ -27,7 +27,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 try:
     for _k in ["FRED_API_KEY","ANTHROPIC_API_KEY","MAKE_WEBHOOK_URL",
                 "DISCORD_WEBHOOK_URL","UNUSUAL_WHALES_API_KEY","REFRESH_INTERVAL_SECONDS",
-                "PLOTLY_USERNAME","PLOTLY_API_KEY"]:
+                "PLOTLY_USERNAME","PLOTLY_API_KEY",
+                "OPENROUTER_API_KEY","OPENROUTER_MODELS","OPENROUTER_APP_URL"]:
         if _k in st.secrets and not os.getenv(_k):
             os.environ[_k] = str(st.secrets[_k])
 except Exception:
@@ -96,6 +97,7 @@ try:
     )
     from src.data.tactical_agent import (
         build_live_context, ask_tactical_agent, is_agent_available, AGENT_SYSTEM_PROMPT,
+        agent_route_status,
     )
 except Exception as _import_err:
     import traceback as _tb
@@ -1013,6 +1015,7 @@ with st.expander("📤 Share Charts — Interactive HTML Export", expanded=False
 # TABS
 # ══════════════════════════════════════════════════════════════════════════════
 tabs = st.tabs([
+    "🎯  Desk Prep",
     "🌡️  Macro Score",
     "🦅  Black Raven",
     "🤖  Tactical Agent",
@@ -1024,8 +1027,16 @@ tabs = st.tabs([
     "🔔  Price Alerts",
     "🔍  Stock Review",
 ])
-(tab_macro, tab_raven, tab_agent, tab_ratings, tab_watch, tab_heat_stocks,
+(tab_desk, tab_macro, tab_raven, tab_agent, tab_ratings, tab_watch, tab_heat_stocks,
  tab_breadth, tab_vol, tab_alert, tab_review) = tabs
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB — DESK PREP (daily briefing, club watchlist, data, hedges)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_desk:
+    from src.components.desk_prep import render_desk_prep
+    render_desk_prep()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2848,6 +2859,7 @@ with tab_agent:
                     except Exception as _agent_err:
                         _answer = f"⚠️ Agent error: {redact_secrets(_agent_err)}"
                 st.markdown(_answer)
+                st.caption(f"⛓ Route: {agent_route_status()}")
             st.session_state.agent_chat.append({"role": "user", "content": _user_q})
             st.session_state.agent_chat.append({"role": "assistant", "content": _answer})
 
