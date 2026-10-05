@@ -1,33 +1,17 @@
 """
-AI Market Analysis Engine — Claude (Anthropic) integration.
-Provides market commentary, Q&A, and structured analysis.
+AI Market Analysis Engine — routed through OmniRoute (OpenRouter).
+
+Every call goes through src.data.llm_router, which walks a priority-ordered
+model chain and steps down to the next model when the current one runs out of
+tokens/credits, gets rate-limited, or goes down. See llm_router.py.
 """
 from __future__ import annotations
 
-import os
-import json
 import pandas as pd
 from datetime import datetime
 
-try:
-    import anthropic
-    _ANTHROPIC_OK = True
-except ImportError:
-    _ANTHROPIC_OK = False
-
-_client = None
-
-
-def _get_client():
-    global _client
-    if _client is None:
-        key = os.getenv("ANTHROPIC_API_KEY", "")
-        if not key or "your_anthropic" in key:
-            raise EnvironmentError("ANTHROPIC_API_KEY not configured in .env")
-        if not _ANTHROPIC_OK:
-            raise ImportError("anthropic package not installed. Run: pip install anthropic")
-        _client = anthropic.Anthropic(api_key=key)
-    return _client
+from . import llm_router
+from .llm_router import RouterError  # noqa: F401 — re-exported for callers
 
 
 # ── System prompt ─────────────────────────────────────────────────────────────
@@ -105,25 +89,20 @@ def ask_ai(
     stream: bool = False,
 ) -> str:
     """
-    Send a question to Claude with market context.
+    Send a question to the routed model with market context.
     Returns the response text (or raises on error).
     """
-    client = _get_client()
-
     prompt = f"{market_context}\n\n---\n\n**User Question:** {question}" if market_context else question
 
-    message = client.messages.create(
-        model="claude-opus-4-5",
-        max_tokens=1024,
+    return llm_router.chat(
+        [{"role": "user", "content": prompt}],
         system=_SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1024,
     )
-    return message.content[0].text
 
 
 def generate_market_brief(market_context: str) -> str:
     """Auto-generate a morning market brief from current data."""
-    client = _get_client()
     prompt = (
         f"{market_context}\n\n---\n\n"
         "Generate a concise institutional morning market brief covering:\n"
@@ -133,19 +112,15 @@ def generate_market_brief(market_context: str) -> str:
         "4. **Watch List** — what to monitor\n\n"
         "Keep it under 300 words. Use a professional, analytical tone."
     )
-    message = client.messages.create(
-        model="claude-opus-4-5",
-        max_tokens=1024,
+    return llm_router.chat(
+        [{"role": "user", "content": prompt}],
         system=_SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1024,
     )
-    return message.content[0].text
 
 
 def analyze_ticker(ticker: str, fundamentals: dict, price_df: pd.DataFrame) -> str:
     """Generate AI analysis for a specific stock."""
-    client = _get_client()
-
     # Build context
     fund_str = []
     if fundamentals:
@@ -180,16 +155,23 @@ def analyze_ticker(ticker: str, fundamentals: dict, price_df: pd.DataFrame) -> s
         "5. **What to Watch** — key upcoming catalysts\n\n"
         "Under 350 words. No buy/sell recommendation."
     )
-    message = client.messages.create(
-        model="claude-opus-4-5",
-        max_tokens=1024,
+    return llm_router.chat(
+        [{"role": "user", "content": prompt}],
         system=_SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1024,
     )
-    return message.content[0].text
 
 
 def is_ai_available() -> bool:
-    """Check if AI key is configured."""
-    key = os.getenv("ANTHROPIC_API_KEY", "")
-    return bool(key) and "your_anthropic" not in key and _ANTHROPIC_OK
+    """True if the router has at least one usable key."""
+    return llm_router.is_available()
+
+
+def ai_backend() -> str:
+    """Which transport the router will use: 'openrouter' | 'anthropic' | 'none'."""
+    return llm_router.active_backend()
+
+
+def ai_route_status() -> str:
+    """Which model actually served the last call."""
+    return llm_router.route_status()

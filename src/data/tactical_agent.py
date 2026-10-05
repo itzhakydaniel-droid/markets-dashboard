@@ -7,14 +7,18 @@ Architecture:
   build_live_context() — serializes live dashboard state (sector rotation,
                          51-stock raven sweep, macro matrix, yields, VIX, COT)
                          into a compact context block injected on every turn
-  ask_tactical_agent() — Claude API call (anthropic SDK)
+  ask_tactical_agent() — routed LLM call (OmniRoute / OpenRouter, with failover)
 """
 from __future__ import annotations
 
-import os
 import pandas as pd
 
-MODEL_ID = "claude-opus-4-8"
+from . import llm_router
+
+MODEL_ID = "anthropic/claude-opus-4.8"
+
+# The agent leads with its pinned model, then inherits the shared fallback chain.
+AGENT_CHAIN = [MODEL_ID] + [m for m in llm_router.DEFAULT_CHAIN if m != MODEL_ID]
 
 # ── Step 3: hardcoded system prompt ───────────────────────────────────────────
 AGENT_SYSTEM_PROMPT = """You are the Tactical AI Agent of Black Raven Protocol v1.0 — a cold, calculating institutional quantitative strategist embedded in a live markets dashboard.
@@ -140,33 +144,35 @@ def build_live_context(
 
 
 def is_agent_available() -> bool:
-    key = os.getenv("ANTHROPIC_API_KEY", "")
-    return bool(key) and "your_anthropic" not in key
+    return llm_router.is_available()
+
+
+def agent_route_status() -> str:
+    """Which model actually served the last agent turn."""
+    return llm_router.route_status()
 
 
 def ask_tactical_agent(question: str, history: list[dict], live_context: str) -> str:
     """
     One agent turn. `history` = [{"role": "user"|"assistant", "content": str}, ...]
-    (prior turns only). The static system prompt is prompt-cached; the volatile
-    live context rides in a second system block after the cache breakpoint.
+    (prior turns only).
+
+    Routed through OmniRoute: the chain starts at MODEL_ID and steps down to the
+    next model whenever the current one runs out of tokens/credits or is rate-
+    limited. The static persona leads the system block so it stays prefix-stable
+    and cacheable; the volatile live context is appended after it.
     """
-    import anthropic
-
-    client = anthropic.Anthropic()  # ANTHROPIC_API_KEY from env
-
     messages = [{"role": m["role"], "content": m["content"]} for m in history[-12:]]
     messages.append({"role": "user", "content": question})
 
-    response = client.messages.create(
-        model=MODEL_ID,
-        max_tokens=2048,
-        system=[
-            {"type": "text", "text": AGENT_SYSTEM_PROMPT,
-             "cache_control": {"type": "ephemeral"}},   # static — cached
-            {"type": "text", "text": live_context},      # volatile — after breakpoint
-        ],
-        messages=messages,
-    )
-    if response.stop_reason == "refusal":
-        return "Request declined by model safety systems. Rephrase within protocol scope."
-    return "".join(b.text for b in response.content if b.type == "text")
+    system = f"{AGENT_SYSTEM_PROMPT}\n\n{live_context}"
+
+    try:
+        return llm_router.chat(
+            messages,
+            system=system,
+            max_tokens=2048,
+            models=AGENT_CHAIN,
+        )
+    except llm_router.RouterError as exc:
+        return f"**Router exhausted — no model answered.**\n\n```\n{exc}\n```"

@@ -11,7 +11,8 @@ import numpy as np
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# ── Master Watchlist — 65 core stocks, institutional ranking ─────────────────
+# ── Master Watchlist — institutional ranking ─────────────────────────────────
+# Tiers follow the desk protocol (insiders_club/knowledge/my_method.md §6).
 # Entry types: sma50 / sma100 / sma200 → limit order at that moving average.
 # "special" → discretionary structural rule (textual); 50-SMA shown as anchor.
 
@@ -25,12 +26,12 @@ MASTER_WATCHLIST: dict[str, dict] = {
     "VRT":       {"tier": 1, "name": "Vertiv",              "sector": "Thermal / Liquid Cooling", "entry": "sma50",  "entry_note": "50-Day SMA"},
     "ETN":       {"tier": 1, "name": "Eaton",               "sector": "Power Grid Infra",         "entry": "special","entry_note": "Bottom of rising channel"},
     "AVGO":      {"tier": 1, "name": "Broadcom",            "sector": "Custom Silicon / Network", "entry": "sma100", "entry_note": "100-Day SMA"},
-    "MRVL":      {"tier": 1, "name": "Marvell",             "sector": "Silicon Photonics",        "entry": "sma200", "entry_note": "200-Day SMA"},
+    "MRVL":      {"tier": 2, "name": "Marvell",             "sector": "Silicon Photonics",        "entry": "sma200", "entry_note": "200-Day SMA"},
     "2327.TW":   {"tier": 1, "name": "Yageo",               "sector": "MLCC Passives",            "entry": "special","entry_note": "Breakout retests"},
     "MRAAY":     {"tier": 1, "name": "Murata",              "sector": "High-Reliability Passives","entry": "sma200", "entry_note": "200-Day SMA"},
     "TTDKY":     {"tier": 1, "name": "TDK",                 "sector": "HV Power Components",      "entry": "special","entry_note": "Scaled pullbacks"},
     "ASX":       {"tier": 1, "name": "ASE Technology",      "sector": "Advanced Packaging",       "entry": "sma50",  "entry_note": "50-Day SMA"},
-    "AMKR":      {"tier": 1, "name": "Amkor",               "sector": "US Advanced Packaging",    "entry": "sma100", "entry_note": "100-Day SMA"},
+    "AMKR":      {"tier": 2, "name": "Amkor",               "sector": "US Advanced Packaging",    "entry": "sma100", "entry_note": "100-Day SMA"},
     "ANET":      {"tier": 1, "name": "Arista Networks",     "sector": "Cloud Switching",          "entry": "sma50",  "entry_note": "50-Day SMA"},
     "LEU":       {"tier": 1, "name": "Centrus Energy",      "sector": "HALEU Enrichment Monopoly","entry": "sma50",  "entry_note": "50-Day SMA — ambush on panic/backlog disconnects",
                   "linked": ["CEG", "VST"],
@@ -44,12 +45,12 @@ MASTER_WATCHLIST: dict[str, dict] = {
     "KLAC":      {"tier": 2, "name": "KLA Corp",            "sector": "Yield / Metrology",        "entry": "sma100", "entry_note": "100-Day SMA"},
     "TER":       {"tier": 2, "name": "Teradyne",            "sector": "SoC / AI Testing",         "entry": "sma200", "entry_note": "Strict limit at 200-Day SMA"},
     "COHU":      {"tier": 2, "name": "Cohu",                "sector": "Thermal Test / Handling",  "entry": "special","entry_note": "Short-term channel bottom"},
-    "ONTO":      {"tier": 2, "name": "Onto Innovation",     "sector": "Packaging Metrology",      "entry": "special","entry_note": "10%+ pullback from highs"},
-    "CAMT":      {"tier": 2, "name": "Camtek",              "sector": "3D Optical Inspection",    "entry": "sma100", "entry_note": "100-Day SMA support"},
-    "FORM":      {"tier": 2, "name": "FormFactor",          "sector": "Probe Cards",              "entry": "special","entry_note": "Trading channel bottom"},
+    "ONTO":      {"tier": 3, "name": "Onto Innovation",     "sector": "Packaging Metrology",      "entry": "special","entry_note": "10%+ pullback from highs"},
+    "CAMT":      {"tier": 3, "name": "Camtek",              "sector": "3D Optical Inspection",    "entry": "sma100", "entry_note": "100-Day SMA support"},
+    "FORM":      {"tier": 3, "name": "FormFactor",          "sector": "Probe Cards",              "entry": "special","entry_note": "Trading channel bottom"},
     "COHR":      {"tier": 2, "name": "Coherent",            "sector": "Optics / Lasers (GM 40.2%)","entry": "special","entry_note": "Extreme depth pullbacks",
                   "raven_override": ("PRICING POWER CONFIRMED — GM expansion to 40.2%, extreme DC transceiver demand", "#10b981")},
-    "AAOI":      {"tier": 2, "name": "Applied Opto",        "sector": "800G Optical Transceivers","entry": "sma50",  "entry_note": "50-Day SMA"},
+    "AAOI":      {"tier": 3, "name": "Applied Opto",        "sector": "800G Optical Transceivers","entry": "sma50",  "entry_note": "50-Day SMA"},
     "LITE":      {"tier": 2, "name": "Lumentum",            "sector": "Optical Routing",          "entry": "sma200", "entry_note": "200-Day SMA"},
     "CRDO":      {"tier": 2, "name": "Credo Technology",    "sector": "High-Speed AEC Cables",    "entry": "special","entry_note": "Volume confirmed breakout"},
     "FCX":       {"tier": 2, "name": "Freeport-McMoRan",     "sector": "Base Metals / Copper Electrification", "entry": "special", "entry_note": "Accumulate on macro dips"},
@@ -64,8 +65,17 @@ MASTER_WATCHLIST: dict[str, dict] = {
                   "raven_override": ("STORAGE BOTTLENECK ALPHA — nearline HDD cold-data archive scarcity", "#10b981")},
     "STX":       {"tier": 2, "name": "Seagate",             "sector": "Nearline HDD Mass Storage","entry": "sma50",  "entry_note": "50-Day SMA",
                   "raven_override": ("STORAGE BOTTLENECK ALPHA — nearline HDD cold-data archive scarcity", "#10b981")},
+    # ── Insiders Club portfolio additions (weekly summary 28/09–02/10/2026) ──
+    "GLW":       {"tier": 2, "name": "Corning",             "sector": "Optical Fiber / Cable",    "entry": "sma50",  "entry_note": "50-Day SMA",
+                  "raven_override": ("CONTRACTED DEMAND — $3B+ multi-year AT&T fiber deal (29/09)", "#10b981")},
+    "SMTC":      {"tier": 2, "name": "Semtech",             "sector": "Copper/Optical DC Connectivity", "entry": "sma50", "entry_note": "50-Day SMA — no chase at 52w high"},
+    "TSEM":      {"tier": 2, "name": "Tower Semi",          "sector": "Silicon Photonics Foundry","entry": "sma50",  "entry_note": "50-Day SMA"},
+    "SNDK":      {"tier": 2, "name": "SanDisk",             "sector": "NAND / Enterprise SSD",    "entry": "sma50",  "entry_note": "50-Day SMA",
+                  "raven_override": ("MEMORY CYCLE PEAK RISK — sell-the-news after MU print", "#f59e0b")},
+    "SITM":      {"tier": 2, "name": "SiTime",              "sector": "MEMS Precision Timing",    "entry": "sma50",  "entry_note": "50-Day SMA"},
+    "BE":        {"tier": 2, "name": "Bloom Energy",        "sector": "On-site Power / Time-to-Power", "entry": "sma50", "entry_note": "50-Day SMA — price above analyst target"},
     # ── TIER 3: Medium Conviction — policy beta, integration, hedges ──────────
-    "POWL":      {"tier": 3, "name": "Powell Industries",   "sector": "Electrical Enclosures",    "entry": "sma50",  "entry_note": "50-Day SMA"},
+    "POWL":      {"tier": 1, "name": "Powell Industries",   "sector": "Electrical Enclosures",    "entry": "sma50",  "entry_note": "50-Day SMA"},
     "NVT":       {"tier": 3, "name": "nVent Electric",      "sector": "Liquid Cooling Enclosures","entry": "sma100", "entry_note": "100-Day SMA"},
     "GEV":       {"tier": 3, "name": "GE Vernova",          "sector": "Grid Power Generation",    "entry": "special","entry_note": "Post-breakout consolidation",
                   "raven_override": ("PERMITTING & POWER GRID DELAY — verify approved interconnects vs. paper megawatts", "#f59e0b")},
@@ -85,6 +95,23 @@ MASTER_WATCHLIST: dict[str, dict] = {
                   "raven_override": ("HIGH VOLATILITY — Deep Value logic strictly during flushes", "#f59e0b")},
     "RKLB":      {"tier": 3, "name": "Rocket Lab",           "sector": "Space Economy Backlog",     "entry": "special", "entry_note": "Structural support — size for volatility",
                   "raven_override": ("EXECUTION RISK / EARNINGS VOLATILITY", "#f97316")},
+    # ── Insiders Club portfolio additions (weekly summary 28/09–02/10/2026) ──
+    "VIAV":      {"tier": 3, "name": "Viavi Solutions",     "sector": "Optical / 1.6T Network Test", "entry": "sma50", "entry_note": "50-Day SMA"},
+    "VECO":      {"tier": 3, "name": "Veeco",               "sector": "Process Equipment (MOCVD/Ion Beam)", "entry": "sma50", "entry_note": "50-Day SMA"},
+    "TTMI":      {"tier": 3, "name": "TTM Technologies",    "sector": "Advanced PCB / Defense RF", "entry": "sma50", "entry_note": "50-Day SMA",
+                  "raven_override": ("DILUTION WATCH — $1.1B Epiq acquisition, FCF negative", "#f59e0b")},
+    "AEHR":      {"tier": 3, "name": "Aehr Test Systems",   "sector": "Wafer-Level Burn-in Test", "entry": "sma50",  "entry_note": "50-Day SMA",
+                  "raven_override": ("HIGH VOLATILITY — small-cap test, FCF negative", "#f59e0b")},
+    "UCTT":      {"tier": 3, "name": "Ultra Clean",         "sector": "WFE Subsystems (Contract)", "entry": "sma200", "entry_note": "200-Day SMA only",
+                  "raven_override": ("NO PRICING POWER — GM 16%, FCF negative (quality grade C)", "#f97316")},
+    "SANM":      {"tier": 3, "name": "Sanmina",             "sector": "EMS / AI Rack Integration", "entry": "sma100", "entry_note": "100-Day SMA",
+                  "raven_override": ("OEM MARGIN PROFILE — GM ~9%, contract manufacturer", "#f97316")},
+    "AGX":       {"tier": 3, "name": "Argan",               "sector": "Power Plant EPC / Backlog", "entry": "sma200", "entry_note": "Wait for 200-Day SMA reclaim",
+                  "raven_override": ("TREND BROKEN — below 200-SMA, RPO backlog shrinking YoY", "#f97316")},
+    "FPS":       {"tier": 3, "name": "Forgent Power",       "sector": "Power Distribution Equipment", "entry": "special", "entry_note": "New listing — structural support only",
+                  "raven_override": ("NEW LISTING — <1y price history, no 200-SMA anchor", "#f59e0b")},
+    "GH":        {"tier": 3, "name": "Guardant Health",     "sector": "Liquid Biopsy (non-AI growth)", "entry": "sma50", "entry_note": "50-Day SMA",
+                  "raven_override": ("OUTSIDE AI-INFRA THESIS — operating losses; club growth position", "#f59e0b")},
     # ── TIER 4: DANGER ZONE — spenders, leveraged cloud, no pricing power ─────
     "SMCI":      {"tier": 4, "name": "Super Micro",         "sector": "OEM Margin Collapse (GM 11.2%)", "entry": "avoid",  "entry_note": "Avoid / Short — split rally is not a thesis change",
                   "raven_override": ("LIQUIDITY ANOMALY / RETAIL FOMO TRAP — GM collapsed to 11.2%; 10-for-1 split rally ignored", "#ef4444")},
@@ -100,6 +127,14 @@ MASTER_WATCHLIST: dict[str, dict] = {
     "ADBE":      {"tier": 4, "name": "Adobe",                "sector": "Legacy SaaS / AI Disintermediation", "entry": "avoid", "entry_note": "Underweight / Avoid"},
     "CRM":       {"tier": 4, "name": "Salesforce",           "sector": "Legacy SaaS / AI Disintermediation", "entry": "avoid", "entry_note": "Underweight / Avoid"},
 }
+
+# Insiders Club stock portfolio — the most up-to-date list (weekly summary,
+# channel יומן-מסחר-וסיכום-שבוע). Synced by the daily insiders-club study task.
+CLUB_PORTFOLIO: tuple[str, ...] = (
+    "AGX", "VIAV", "AEHR", "TER", "TTMI", "ARM", "POWL", "VICR", "SMTC", "AAOI",
+    "SANM", "AMKR", "UCTT", "AIP", "VECO", "GLW", "ALGM", "PENG", "TSEM", "SNDK",
+    "BE", "SITM", "FPS", "CRDO", "GH",
+)
 
 # Backwards-compatible tier→{ticker: "Name — sector"} view used by fetch_tier_radar
 TIER_UNIVERSE: dict[int, dict[str, str]] = {}
