@@ -140,14 +140,18 @@ def macro_table() -> tuple[pd.DataFrame, pd.DataFrame]:
 @st.cache_data(ttl=900, show_spinner=False)
 def hedge_table(dmin: int, dmax: int, long_otm: float, short_otm: float) -> pd.DataFrame:
     from src.data.options import put_spread
-    rows = []
+    rows, errors = [], []
     for t in HEDGE_VEHICLES:
         try:
             r = put_spread(t, dmin, dmax, long_otm, short_otm)
             if r:
                 rows.append(r)
-        except Exception:
-            continue
+            else:
+                errors.append(f"{t}: no matching strikes")
+        except Exception as e:
+            errors.append(f"{t}: {type(e).__name__}: {str(e)[:120]}")
+    if not rows:  # raise so an empty result is not cached
+        raise RuntimeError(" | ".join(errors))
     return pd.DataFrame(rows)
 
 
@@ -252,10 +256,12 @@ def _render_hedges():
         st.warning("הפוט הנמכר חייב להיות רחוק יותר מהפוט הנקנה.")
         return
     with st.spinner("מושך שרשראות אופציות..."):
-        h = hedge_table(dte[0], dte[1], lo, so)
-    if h.empty:
-        _rtl("<p>לא התקבלו נתוני אופציות כרגע.</p>")
-        return
+        try:
+            h = hedge_table(dte[0], dte[1], lo, so)
+        except Exception as e:
+            _rtl("<p>לא התקבלו נתוני אופציות כרגע. ננסה שוב בטעינה הבאה.</p>")
+            st.caption(f"details: {str(e)[:400]}")
+            return
     out = pd.DataFrame({
         "נכס": h.ticker, "מחיר": h.spot.round(2), "פקיעה": h.expiry, "ימים": h.dte,
         "קנייה": h.long_k, "מכירה": h.short_k, "עלות": h.cost.round(2), "עלות מהנכס": h.cost_pct.map(lambda v: f"{v:.2%}"),
