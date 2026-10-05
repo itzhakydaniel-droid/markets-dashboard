@@ -1,11 +1,13 @@
-"""Black-Scholes Greeks + live option-chain helpers (Yahoo)."""
+"""Black-Scholes Greeks + live option-chain helpers (Yahoo, with CBOE delayed-quote fallback)."""
 from __future__ import annotations
 
 import math
+import re
 from datetime import date, datetime
 
 import numpy as np
 import pandas as pd
+import requests
 import yfinance as yf
 
 R = 0.04  # risk-free (13W bill ~4.0%)
@@ -63,37 +65,76 @@ def expiries_between(tk: str, dmin: int, dmax: int) -> list[str]:
     return out
 
 
+# ── CBOE fallback (Yahoo's options endpoint is often blocked from cloud hosts) ──
+_CBOE_URL = "https://cdn.cboe.com/api/global/delayed_quotes/options/{}.json"
+_OCC = re.compile(r"^(?P<root>[A-Z.]+?)(?P<ymd>\d{6})(?P<kind>[CP])(?P<k>\d{8})$")
+
+
+def cboe_chain_all(tk: str) -> pd.DataFrame:
+    """All expiries from CBOE delayed quotes, in the same columns as chain()."""
+    r = requests.get(_CBOE_URL.format(tk.upper()), headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
+    r.raise_for_status()
+    today = date.today()
+    rows = []
+    for o in r.json()["data"]["options"]:
+        m = _OCC.match(o["option"])
+        if not m:
+            continue
+        exp = datetime.strptime(m["ymd"], "%y%m%d").date()
+        bid, ask = o.get("bid") or 0, o.get("ask") or 0
+        mid = (bid + ask) / 2 if bid > 0 and ask > 0 else (o.get("last_trade_price") or 0)
+        rows.append(dict(expiry=exp.isoformat(), kind=m["kind"], strike=int(m["k"]) / 1000, mid=float(mid),
+                         iv=float(o.get("iv") or 0), oi=o.get("open_interest"), dte=(exp - today).days,
+                         delta=o.get("delta"), gamma=o.get("gamma"), theta=o.get("theta"), vega=o.get("vega")))
+    return pd.DataFrame(rows)
+
+
 def _nearest(df: pd.DataFrame, k: float) -> pd.Series:
     return df.iloc[(df.strike - k).abs().argsort()].iloc[0]
 
 
 def put_spread(tk: str, dmin: int = 25, dmax: int = 50, long_otm: float = 0.05, short_otm: float = 0.12) -> dict | None:
-    """Bear put spread candidate: buy ~long_otm below spot, sell ~short_otm below spot."""
-    h = yf.Ticker(tk).history(period="1y")
+    """Bear put spread candidate: buy ~long_otm below spot, sell ~short_otm below spot.
+    Tries Yahoo first, then CBOE delayed quotes."""
+    h = yf.download(tk, period="1y", progress=False, auto_adjust=True)["Close"]
+    h = h.iloc[:, 0] if isinstance(h, pd.DataFrame) else h
+    h = h.dropna()
     if h.empty:
         return None
-    S = float(h.Close.iloc[-1])
-    exps = expiries_between(tk, dmin, dmax)
-    if not exps:
-        return None
-    exp = exps[0]
-    d = chain(tk, exp, S)
+    S = float(h.iloc[-1])
+    d, exp, source = None, None, "Yahoo"
+    try:
+        exps = expiries_between(tk, dmin, dmax)
+        if exps:
+            exp = exps[0]
+            d = chain(tk, exp, S)
+    except Exception:
+        d = None
+    if d is None or d.empty or (d.mid > 0).sum() < 5:
+        source = "CBOE"
+        allc = cboe_chain_all(tk)
+        allc = allc[(allc.dte >= dmin) & (allc.dte <= dmax)]
+        if allc.empty:
+            return None
+        exp = allc.expiry.min()
+        d = allc[allc.expiry == exp]
     puts = d[(d.kind == "P") & (d.mid > 0)]
-    if puts.empty:
+    if puts.empty or not (puts.strike < S * (1 - long_otm)).any():
         return None
     lp = _nearest(puts, S * (1 - long_otm))
-    sp = _nearest(puts[puts.strike < lp.strike], S * (1 - short_otm)) if (puts.strike < lp.strike).any() else None
-    if sp is None:
+    lower = puts[puts.strike < lp.strike]
+    if lower.empty:
         return None
+    sp = _nearest(lower, S * (1 - short_otm))
     atm = _nearest(puts, S)
     cost = lp.mid - sp.mid
     width = lp.strike - sp.strike
     return dict(
-        ticker=tk, spot=S, expiry=exp, dte=int(lp.dte),
+        ticker=tk, spot=S, expiry=exp, dte=int(lp.dte), source=source,
         long_k=lp.strike, short_k=sp.strike, cost=cost, cost_pct=cost / S,
         max_pay=width - cost, pay_ratio=(width - cost) / cost if cost > 0 else np.nan,
         breakeven=lp.strike - cost, iv_long=lp.iv, iv_short=sp.iv, iv_atm=atm.iv,
-        skew=sp.iv - atm.iv, rv=realized_vol(h.Close),
+        skew=sp.iv - atm.iv, rv=realized_vol(h),
         delta=lp.delta - sp.delta, theta=lp.theta - sp.theta, vega=lp.vega - sp.vega,
-        sma50=float(h.Close.tail(50).mean()), sma200=float(h.Close.tail(200).mean()),
+        sma50=float(h.tail(50).mean()), sma200=float(h.tail(200).mean()),
     )

@@ -264,7 +264,7 @@ def _render_hedges():
         "תנודתיות על הכסף": h.iv_atm.map(lambda v: f"{v:.0%}"), "תנודתיות בפועל": h.rv.map(lambda v: f"{v:.0%}"),
         "יחס": (h.iv_atm / h.rv).round(2), "סקיו": h["skew"].map(lambda v: f"{v:+.0%}"),
         "דלתא": h.delta.round(2), "תטא ליום": h.theta.round(3), "וגה": h.vega.round(3),
-        "ממוצע 50": h.sma50.round(2), "ממוצע 200": h.sma200.round(2),
+        "ממוצע 50": h.sma50.round(2), "ממוצע 200": h.sma200.round(2), "מקור": h.source,
     })
     st.dataframe(out, hide_index=True, use_container_width=True)
     best = h.loc[h.pay_ratio.idxmax()]
