@@ -56,9 +56,19 @@ def read_briefing(day: str) -> str:
         return f.read()
 
 
+_BLOCK_START = re.compile(r"^(\||- |\* |\d+\. )")
+
+
 def _md_to_html(md: str) -> str:
+    """Python-Markdown needs a blank line before tables/lists; the briefings often omit it."""
     import markdown
-    return markdown.markdown(md, extensions=["tables", "sane_lists"])
+    out, prev = [], ""
+    for line in md.splitlines():
+        if _BLOCK_START.match(line) and prev.strip() and not _BLOCK_START.match(prev):
+            out.append("")
+        out.append(line)
+        prev = line
+    return markdown.markdown("\n".join(out), extensions=["tables", "sane_lists"])
 
 
 @st.cache_data(ttl=120, show_spinner=False)
